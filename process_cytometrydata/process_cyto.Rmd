@@ -708,3 +708,1760 @@ boxplotD2+ stat_compare_means(aes(group = Day), method="wilcox.test", label = "p
 :::
 ::::
 :::::
+
+# PCA Analysis
+
+## All Strains Day 2
+```{r}
+datos_longD6 <- filter(raw_data, Day == "D2")
+#datos_longD6 <- raw_data %>%  filter(Day == "D6", Strain %in% c("L5", "A4"))
+datos_anchos <- datos_longD6 %>%
+  pivot_wider(names_from = Cell_Type, values_from = logfold)
+datos_anchosOG <- datos_longD6 %>%
+  pivot_wider(names_from = Cell_Type, values_from = logfold )
+datos_anchos$Experiment<-NULL
+datos_anchos$ID<-NULL
+datos_anchos$Day<-NULL
+datos_anchos<-na.omit(datos_anchos)
+datos_anchosOG<-na.omit(datos_anchosOG)
+# Realizar el PCA
+pca_resultado <- prcomp(datos_anchos[, -c(1,2)], center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
+pca_df <- as.data.frame(pca_resultado$x)
+pca_df$Strain <- datos_anchos$Strain
+pca_df$Cell <- datos_anchos$Cell
+pca_df$Experiment <- datos_anchosOG$Experiment
+```
+### Stats
+::::: {.panel-tabset}
+# Scree Plot
+```{r, warning=FALSE,message=FALSE}
+res.pca <- PCA(datos_anchos[, -c(1,2)], graph = FALSE)
+
+var <- get_pca_var(res.pca)
+eig.val <- get_eigenvalue(res.pca)
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
+
+```
+# Corrplot
+```{r, warning=FALSE,message=FALSE}
+corrplot(var$cos2, is.corr=FALSE)
+```
+:::::
+### Raw PCA
+:::::: {.panel-tabset}
+# PC1-PC2
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+# PC2-PC3
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+# PC1-PC3
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+::::::
+### PCA in 3D
+```{r,warning=FALSE}
+# Realizar PCA manteniendo los tres primeros componentes principales
+pca_resultado <- prcomp(datos_anchos[, -c(1,2)], scale. = TRUE, center = TRUE, rank. = 3)
+
+# Convertir los resultados a un dataframe para plotly
+pca_scores <- as.data.frame(pca_resultado$x[, 1:3])
+pca_scores$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+# Gráfico interactivo con plotly
+library(plotly)
+
+# Suponiendo que pca_scores y loadings ya están definidos
+
+# Factor de escala para las líneas de carga
+scale.loads <- 5
+loadings <- pca_resultado$rotation[, 1:3]
+nombres_variables <- rownames(loadings)
+# Crear el gráfico de los puntajes del PCA
+p_scores <- plot_ly(pca_scores, x = ~PC1, y = ~PC2, z = ~PC3, type = 'scatter3d', mode = 'markers',
+                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "cyan","brown", "turquoise", "black"), 
+                    marker = list(size = 5)) %>%
+             layout(title = "PCA Tridimensional",
+                    scene = list(xaxis = list(title = 'PC1'),
+                                 yaxis = list(title = 'PC2'),
+                                 zaxis = list(title = 'PC3')))
+
+# Crear un gráfico en blanco para las líneas de carga
+p_loadings <- plot_ly() %>%
+              layout(scene = list(xaxis = list(title = 'PC1'),
+                                  yaxis = list(title = 'PC2'),
+                                  zaxis = list(title = 'PC3')))
+
+# Agregar las líneas de carga al gráfico
+for (i in 1:nrow(loadings)) {
+    p_loadings <- p_loadings %>% add_trace(
+        x = c(0, loadings[i, 1]) * scale.loads,
+        y = c(0, loadings[i, 2]) * scale.loads,
+        z = c(0, loadings[i, 3]) * scale.loads,
+        type = "scatter3d", mode = "lines",
+        text = nombres_variables[i], # Nombre de la variable
+        line = list(color = "black", width = 2)
+    )
+}
+
+# Combinar los dos gráficos
+p_final <- subplot(p_loadings, p_scores, nrows = 1)
+
+# Mostrar el gráfico combinado
+p_final
+```
+### PCA with Areas
+::::: {.panel-tabset}
+# For Cell Type
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC1-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+::::
+# For Strain-Cell Type
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+
+```
+## PC1-PC3
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+
+```
+::::
+:::::
+
+## All Strains Day 6
+```{r}
+datos_longD6 <- filter(raw_data, Day == "D6")
+#datos_longD6 <- raw_data %>%  filter(Day == "D6", Strain %in% c("L5", "A4"))
+datos_anchos <- datos_longD6 %>%
+  pivot_wider(names_from = Cell_Type, values_from = logfold)
+datos_anchosOG <- datos_longD6 %>%
+  pivot_wider(names_from = Cell_Type, values_from = logfold )
+datos_anchos$Experiment<-NULL
+datos_anchos$ID<-NULL
+datos_anchos$Day<-NULL
+datos_anchos<-na.omit(datos_anchos)
+datos_anchosOG<-na.omit(datos_anchosOG)
+# Realizar el PCA
+pca_resultado <- prcomp(datos_anchos[, -c(1,2)], center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
+pca_df <- as.data.frame(pca_resultado$x)
+pca_df$Strain <- datos_anchos$Strain
+pca_df$Cell <- datos_anchos$Cell
+pca_df$Experiment <- datos_anchosOG$Experiment
+```
+### Stats
+::::: {.panel-tabset}
+# Scree Plot
+```{r, warning=FALSE,message=FALSE}
+res.pca <- PCA(datos_anchos[, -c(1,2)], graph = FALSE)
+
+var <- get_pca_var(res.pca)
+eig.val <- get_eigenvalue(res.pca)
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
+
+```
+# Corrplot
+```{r, warning=FALSE,message=FALSE}
+corrplot(var$cos2, is.corr=FALSE)
+```
+:::::
+### Raw PCA
+:::::: {.panel-tabset}
+# PC1-PC2
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+# PC2-PC3
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+# PC1-PC3
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+::::::
+### PCA in 3D
+```{r,warning=FALSE}
+# Realizar PCA manteniendo los tres primeros componentes principales
+pca_resultado <- prcomp(datos_anchos[, -c(1,2)], scale. = TRUE, center = TRUE, rank. = 3)
+
+# Convertir los resultados a un dataframe para plotly
+pca_scores <- as.data.frame(pca_resultado$x[, 1:3])
+pca_scores$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+# Gráfico interactivo con plotly
+library(plotly)
+
+# Suponiendo que pca_scores y loadings ya están definidos
+
+# Factor de escala para las líneas de carga
+scale.loads <- 5
+loadings <- pca_resultado$rotation[, 1:3]
+nombres_variables <- rownames(loadings)
+nombres_variables <- rownames(loadings)
+# Crear el gráfico de los puntajes del PCA
+p_scores <- plot_ly(pca_scores, x = ~PC1, y = ~PC2, z = ~PC3, type = 'scatter3d', mode = 'markers',
+                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "cyan","brown", "turquoise", "black"), 
+                    marker = list(size = 5)) %>%
+             layout(title = "PCA Tridimensional",
+                    scene = list(xaxis = list(title = 'PC1'),
+                                 yaxis = list(title = 'PC2'),
+                                 zaxis = list(title = 'PC3')))
+
+# Crear un gráfico en blanco para las líneas de carga
+p_loadings <- plot_ly() %>%
+              layout(scene = list(xaxis = list(title = 'PC1'),
+                                  yaxis = list(title = 'PC2'),
+                                  zaxis = list(title = 'PC3')))
+
+# Agregar las líneas de carga al gráfico
+for (i in 1:nrow(loadings)) {
+    p_loadings <- p_loadings %>% add_trace(
+        x = c(0, loadings[i, 1]) * scale.loads,
+        y = c(0, loadings[i, 2]) * scale.loads,
+        z = c(0, loadings[i, 3]) * scale.loads,
+        type = "scatter3d", mode = "lines",
+        text = nombres_variables[i], # Nombre de la variable
+        line = list(color = "black", width = 2)
+    )
+}
+
+# Combinar los dos gráficos
+p_final <- subplot(p_loadings, p_scores, nrows = 1)
+
+# Mostrar el gráfico combinado
+p_final
+```
+
+### PCA with Areas
+::::: {.panel-tabset}
+# For Cell Type
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC1-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+::::
+# For Strain-Cell Type
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+
+```
+## PC1-PC3
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+
+```
+::::
+:::::
+
+## A4-L5 Strains Day 2
+```{r}
+#datos_longD6 <- filter(raw_data, Day == "D6")
+datos_longD6 <- raw_data %>%  filter(Day == "D2", Strain %in% c("L5", "A4"))
+datos_anchos <- datos_longD6 %>%
+  pivot_wider(names_from = Cell_Type, values_from = logfold)
+datos_anchosOG <- datos_longD6 %>%
+  pivot_wider(names_from = Cell_Type, values_from = logfold )
+datos_anchos$Experiment<-NULL
+datos_anchos$ID<-NULL
+datos_anchos$Day<-NULL
+datos_anchos<-na.omit(datos_anchos)
+datos_anchosOG<-na.omit(datos_anchosOG)
+# Realizar el PCA
+pca_resultado <- prcomp(datos_anchos[, -c(1,2)], center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
+pca_df <- as.data.frame(pca_resultado$x)
+pca_df$Strain <- datos_anchos$Strain
+pca_df$Cell <- datos_anchos$Cell
+pca_df$Experiment <- datos_anchosOG$Experiment
+```
+### Stats
+::::: {.panel-tabset}
+# Scree Plot
+```{r, warning=FALSE,message=FALSE}
+res.pca <- PCA(datos_anchos[, -c(1,2)], graph = FALSE)
+
+var <- get_pca_var(res.pca)
+eig.val <- get_eigenvalue(res.pca)
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
+
+```
+# Corrplot
+```{r, warning=FALSE,message=FALSE}
+corrplot(var$cos2, is.corr=FALSE)
+```
+:::::
+### Raw PCA
+:::::: {.panel-tabset}
+# PC1-PC2
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+# PC2-PC3
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+# PC1-PC3
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+::::::
+### PCA in 3D
+```{r,warning=FALSE}
+# Realizar PCA manteniendo los tres primeros componentes principales
+pca_resultado <- prcomp(datos_anchos[, -c(1,2)], scale. = TRUE, center = TRUE, rank. = 3)
+
+# Convertir los resultados a un dataframe para plotly
+pca_scores <- as.data.frame(pca_resultado$x[, 1:3])
+pca_scores$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+# Gráfico interactivo con plotly
+library(plotly)
+
+# Suponiendo que pca_scores y loadings ya están definidos
+
+# Factor de escala para las líneas de carga
+scale.loads <- 5
+loadings <- pca_resultado$rotation[, 1:3]
+nombres_variables <- rownames(loadings)
+# Crear el gráfico de los puntajes del PCA
+p_scores <- plot_ly(pca_scores, x = ~PC1, y = ~PC2, z = ~PC3, type = 'scatter3d', mode = 'markers',
+                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "cyan","brown", "turquoise", "black"), 
+                    marker = list(size = 5)) %>%
+             layout(title = "PCA Tridimensional",
+                    scene = list(xaxis = list(title = 'PC1'),
+                                 yaxis = list(title = 'PC2'),
+                                 zaxis = list(title = 'PC3')))
+
+# Crear un gráfico en blanco para las líneas de carga
+p_loadings <- plot_ly() %>%
+              layout(scene = list(xaxis = list(title = 'PC1'),
+                                  yaxis = list(title = 'PC2'),
+                                  zaxis = list(title = 'PC3')))
+
+# Agregar las líneas de carga al gráfico
+for (i in 1:nrow(loadings)) {
+    p_loadings <- p_loadings %>% add_trace(
+        x = c(0, loadings[i, 1]) * scale.loads,
+        y = c(0, loadings[i, 2]) * scale.loads,
+        z = c(0, loadings[i, 3]) * scale.loads,
+        type = "scatter3d", mode = "lines",
+        text = nombres_variables[i], # Nombre de la variable
+        line = list(color = "black", width = 2)
+    )
+}
+
+# Combinar los dos gráficos
+p_final <- subplot(p_loadings, p_scores, nrows = 1)
+
+# Mostrar el gráfico combinado
+p_final
+```
+
+### PCA with Areas
+::::: {.panel-tabset}
+# For Cell Type
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC1-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+::::
+# For Strain-Cell Type
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+
+```
+## PC1-PC3
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+
+```
+::::
+:::::
+
+## A4-L5 Strains Day 6
+```{r}
+#datos_longD6 <- filter(raw_data, Day == "D6")
+datos_longD6 <- raw_data %>%  filter(Day == "D6", Strain %in% c("L5", "A4"))
+datos_anchos <- datos_longD6 %>%
+  pivot_wider(names_from = Cell_Type, values_from = logfold)
+datos_anchosOG <- datos_longD6 %>%
+  pivot_wider(names_from = Cell_Type, values_from = logfold )
+datos_anchos$Experiment<-NULL
+datos_anchos$ID<-NULL
+datos_anchos$Day<-NULL
+datos_anchos<-na.omit(datos_anchos)
+datos_anchosOG<-na.omit(datos_anchosOG)
+# Realizar el PCA
+pca_resultado <- prcomp(datos_anchos[, -c(1,2)], center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
+pca_df <- as.data.frame(pca_resultado$x)
+pca_df$Strain <- datos_anchos$Strain
+pca_df$Cell <- datos_anchos$Cell
+pca_df$Experiment <- datos_anchosOG$Experiment
+```
+### Stats
+::::: {.panel-tabset}
+# Scree Plot
+```{r, warning=FALSE,message=FALSE}
+res.pca <- PCA(datos_anchos[, -c(1,2)], graph = FALSE)
+
+var <- get_pca_var(res.pca)
+eig.val <- get_eigenvalue(res.pca)
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
+
+```
+# Corrplot
+```{r, warning=FALSE,message=FALSE}
+corrplot(var$cos2, is.corr=FALSE)
+```
+:::::
+### Raw PCA
+:::::: {.panel-tabset}
+# PC1-PC2
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+# PC2-PC3
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+# PC1-PC3
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+::::::
+### PCA in 3D
+```{r,warning=FALSE}
+# Realizar PCA manteniendo los tres primeros componentes principales
+pca_resultado <- prcomp(datos_anchos[, -c(1,2)], scale. = TRUE, center = TRUE, rank. = 3)
+
+# Convertir los resultados a un dataframe para plotly
+pca_scores <- as.data.frame(pca_resultado$x[, 1:3])
+pca_scores$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+# Gráfico interactivo con plotly
+library(plotly)
+
+# Suponiendo que pca_scores y loadings ya están definidos
+
+# Factor de escala para las líneas de carga
+scale.loads <- 5
+loadings <- pca_resultado$rotation[, 1:3]
+nombres_variables <- rownames(loadings)
+# Crear el gráfico de los puntajes del PCA
+p_scores <- plot_ly(pca_scores, x = ~PC1, y = ~PC2, z = ~PC3, type = 'scatter3d', mode = 'markers',
+                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "cyan","brown", "turquoise", "black"), 
+                    marker = list(size = 5)) %>%
+             layout(title = "PCA Tridimensional",
+                    scene = list(xaxis = list(title = 'PC1'),
+                                 yaxis = list(title = 'PC2'),
+                                 zaxis = list(title = 'PC3')))
+
+# Crear un gráfico en blanco para las líneas de carga
+p_loadings <- plot_ly() %>%
+              layout(scene = list(xaxis = list(title = 'PC1'),
+                                  yaxis = list(title = 'PC2'),
+                                  zaxis = list(title = 'PC3')))
+
+# Agregar las líneas de carga al gráfico
+for (i in 1:nrow(loadings)) {
+    p_loadings <- p_loadings %>% add_trace(
+        x = c(0, loadings[i, 1]) * scale.loads,
+        y = c(0, loadings[i, 2]) * scale.loads,
+        z = c(0, loadings[i, 3]) * scale.loads,
+        type = "scatter3d", mode = "lines",
+        text = nombres_variables[i], # Nombre de la variable
+        line = list(color = "black", width = 2)
+    )
+}
+
+# Combinar los dos gráficos
+p_final <- subplot(p_loadings, p_scores, nrows = 1)
+
+# Mostrar el gráfico combinado
+p_final
+```
+
+### PCA with Areas
+::::: {.panel-tabset}
+# For Cell Type
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC1-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+::::
+# For Strain-Cell Type
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+
+```
+## PC1-PC3
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+
+```
+::::
+:::::
+
+## ALL in
+```{r}
+datos_longD6 <- raw_data
+datos_anchos <- datos_longD6 %>%
+  pivot_wider(names_from = Cell_Type, values_from = logfold)
+datos_anchosOG <- datos_longD6 %>%
+  pivot_wider(names_from = Cell_Type, values_from = logfold )
+datos_anchos$Experiment<-NULL
+datos_anchos$ID<-NULL
+datos_anchos$Day<-NULL
+datos_anchos<-na.omit(datos_anchos)
+datos_anchosOG<-na.omit(datos_anchosOG)
+# Realizar el PCA
+pca_resultado <- prcomp(datos_anchos[, -c(1,2)], center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
+pca_df <- as.data.frame(pca_resultado$x)
+pca_df$Strain <- datos_anchos$Strain
+pca_df$Cell <- datos_anchos$Cell
+pca_df$Experiment <- datos_anchosOG$Experiment
+pca_df$Day <- datos_anchosOG$Day
+```
+### Stats
+::::: {.panel-tabset}
+# Scree Plot
+```{r, warning=FALSE,message=FALSE}
+res.pca <- PCA(datos_anchos[, -c(1,2)], graph = FALSE)
+
+var <- get_pca_var(res.pca)
+eig.val <- get_eigenvalue(res.pca)
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
+
+```
+# Corrplot
+```{r, warning=FALSE,message=FALSE}
+corrplot(var$cos2, is.corr=FALSE)
+```
+:::::
+### Raw PCA
+:::::: {.panel-tabset}
+# PC1-PC2
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Day
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Day',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Day',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+# PC2-PC3
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Day
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Day',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By Day
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Day',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+# PC1-PC3
+::::: {.panel-tabset}
+## Static
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Day',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_color_mycolors()
+```
+::::
+## Interactive
+:::: {.panel-tabset}
+### By lineage
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+```
+### By Experiment
+```{r, warning=FALSE,message=FALSE}
+ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Day',
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, loadings.label.size = 3,
+         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
+  mycolorsTB::scale_fill_mycolors())
+```
+::::
+:::::
+::::::
+### PCA in 3D
+```{r,warning=FALSE}
+# Realizar PCA manteniendo los tres primeros componentes principales
+pca_resultado <- prcomp(datos_anchos[, -c(1,2)], scale. = TRUE, center = TRUE, rank. = 3)
+
+# Convertir los resultados a un dataframe para plotly
+pca_scores <- as.data.frame(pca_resultado$x[, 1:3])
+pca_scores$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+# Gráfico interactivo con plotly
+library(plotly)
+
+# Suponiendo que pca_scores y loadings ya están definidos
+
+# Factor de escala para las líneas de carga
+scale.loads <- 5
+loadings <- pca_resultado$rotation[, 1:3]
+nombres_variables <- rownames(loadings)
+# Crear el gráfico de los puntajes del PCA
+p_scores <- plot_ly(pca_scores, x = ~PC1, y = ~PC2, z = ~PC3, type = 'scatter3d', mode = 'markers',
+                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "cyan","brown", "turquoise", "black"), 
+                    marker = list(size = 5)) %>%
+             layout(title = "PCA Tridimensional",
+                    scene = list(xaxis = list(title = 'PC1'),
+                                 yaxis = list(title = 'PC2'),
+                                 zaxis = list(title = 'PC3')))
+
+# Crear un gráfico en blanco para las líneas de carga
+p_loadings <- plot_ly() %>%
+              layout(scene = list(xaxis = list(title = 'PC1'),
+                                  yaxis = list(title = 'PC2'),
+                                  zaxis = list(title = 'PC3')))
+
+# Agregar las líneas de carga al gráfico
+for (i in 1:nrow(loadings)) {
+    p_loadings <- p_loadings %>% add_trace(
+        x = c(0, loadings[i, 1]) * scale.loads,
+        y = c(0, loadings[i, 2]) * scale.loads,
+        z = c(0, loadings[i, 3]) * scale.loads,
+        type = "scatter3d", mode = "lines",
+        text = nombres_variables[i], # Nombre de la variable
+        line = list(color = "black", width = 2)
+    )
+}
+
+# Combinar los dos gráficos
+p_final <- subplot(p_loadings, p_scores, nrows = 1)
+
+# Mostrar el gráfico combinado
+p_final
+```
+
+### PCA with Areas
+::::: {.panel-tabset}
+# For Cell Type
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC1-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$Cell, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+::::
+# For Day
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchosOG$Day, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchosOG$Day, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC1-PC3
+```{r}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchosOG$Day, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = "jco",
+                addEllipses = TRUE,
+                # Variables
+                alpha.var = "contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+::::
+# For Strain-Cell Type
+:::: {.panel-tabset}
+## PC1-PC2
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+## PC2-PC3
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(2, 3), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+
+```
+## PC1-PC3
+```{r}
+datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+fviz_pca_biplot(res.pca,
+                axes = c(1, 3), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = datos_anchos$combine, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", col.var = "contrib",
+                gradient.cols = "RdYlBu",
+                
+                legend.title = list(fill = "Species", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+
+```
+::::
+:::::
