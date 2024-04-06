@@ -99,3 +99,250 @@ datatable(estadisticos)
 ```
 ## Visualization of Controls 
 To visualize the data, I plot ALL the controls, where each point represents a control, including replicates.
+::::: {.panel-tabset}
+# Split by Day
+:::: {.panel-tabset}
+## Day 2
+```{r fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+# Calcular el numero de observaciones por grupo y encontrar el maximo valor de Value para cada grupo
+filter_Day2 <- filter(control_data_long, Day == "D2")
+
+conteos <- filter_Day2 %>%
+  group_by(Strain, Cell, Cell_Type) %>%
+  summarize(N = sum(!is.na(Value)), max_value = max(Value, na.rm = TRUE), .groups = 'drop')
+
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = Value)) +
+  geom_boxplot(aes(color = Strain), outlier.shape = NA) +  # Mover color a aes() para los boxplots
+  geom_jitter(aes(shape = Experiment),
+              position = position_jitter(width = 0.2), 
+              size = 2, 
+              alpha = 0.4) +
+  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
+  mycolorsTB::scale_color_mycolors() + 
+  theme_bw() +
+  labs(y = "", x = "", title = "Day 2") +
+  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1)) +
+  theme(axis.title = element_text(size = rel(1.5)),  
+        axis.text = element_text(size = rel(1.2)),  
+        plot.title = element_text(size = rel(1.8)),  
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0)
+boxplotD2
+```
+## Day 6
+```{r fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
+filter_Day2 <- filter(control_data_long, Day == "D6")
+
+conteos <- filter_Day2 %>%
+  group_by(Strain, Cell, Cell_Type) %>%
+  summarize(N = sum(!is.na(Value)), max_value = max(Value, na.rm = TRUE), .groups = 'drop')
+
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = Value)) +
+  geom_boxplot(aes(color = Strain), outlier.shape = NA) +  # Mover color a aes() para los boxplots
+  geom_jitter(aes(shape = Experiment), 
+              position = position_jitter(width = 0.2), 
+              size = 2, 
+              alpha = 0.4) +
+  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
+  mycolorsTB::scale_color_mycolors() +  # Escala de color para los puntos
+  theme_bw() +
+  labs(y = "", x = "", title = "Day 6") +
+  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1)) +
+  theme(axis.title = element_text(size = rel(1.5)),  
+        axis.text = element_text(size = rel(1.2)),  
+        plot.title = element_text(size = rel(1.8)),  
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0)
+boxplotD2
+```
+::::
+# Split by Day and Experiment
+```{r funcexp,, message=FALSE, warning=FALSE, echo=FALSE }
+create_boxplot <- function(data, experiment_id, day, shape_value) {
+  # Define los valores requeridos para Strain, Cell y Cell_Type
+  required_strains <- c("A4", "A1", "L5", "L6")
+  required_cells <- c("BoMac", "THP1")
+  required_cell_types <- c("Late Apoptosis", "Early Apoptosis", "Necrotic", "Live")
+
+  # Filtra los datos basándose en el ID del experimento y el día
+  filtered_data <- filter(data, Day == day, Experiment == experiment_id)
+
+  # Asegura que todas las combinaciones de Strain, Cell y Cell_Type estén presentes
+  filtered_data <- filtered_data %>%
+    complete(Strain = required_strains, Cell = required_cells, Cell_Type = required_cell_types, 
+             nesting(Experiment), fill = list(Value = NA))
+
+  # Calcula conteos y valores máximos
+  conteos <- filtered_data %>%
+    group_by(Strain, Cell, Cell_Type) %>%
+    summarize(N = sum(!is.na(Value)), max_value = max(Value, na.rm = TRUE), .groups = 'drop')
+
+  # Crea el boxplot
+  boxplot <- ggplot(filtered_data, aes(x = Strain, y = Value)) +
+    geom_boxplot(aes(color = Strain), outlier.shape = NA) +
+    geom_jitter(aes(shape = Experiment),
+                position = position_jitter(width = 0.2),
+                size = 2,
+                alpha = 0.4) +
+    facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") +
+    scale_color_mycolors() +
+    theme_bw() +
+    labs(y = "", x = "", title = paste("Day", day)) +
+    scale_shape_manual(values = shape_value) +
+    theme(axis.title = element_text(size = rel(1.5)),
+          axis.text = element_text(size = rel(1.2)),
+          plot.title = element_text(size = rel(1.8)),
+          strip.text = element_text(size = rel(1.2))) +
+    geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+              position = position_dodge(width = 0.75),
+              size = 3, vjust = 0)
+
+  return(boxplot)
+}
+```
+:::: {.panel-tabset}
+## EXP0002
+::: {.panel-tabset}
+### Day 2
+```{r day2exp2,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "2", "D2", 22)
+```
+### Day 6 
+```{r day6exp2,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "2", "D6", 22)
+```
+:::
+## EXP0003
+::: {.panel-tabset}
+### Day 2
+```{r day2exp3,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "3", "D2", 22)
+```
+### Day 6 
+```{r day6exp3,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "3", "D6", 22)
+```
+:::
+## EXP0004
+::: {.panel-tabset}
+### Day 6 
+```{r day6exp4,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "4", "D6", 22)
+```
+:::
+## EXP0005
+::: {.panel-tabset}
+### Day 2
+```{r day2exp5,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "5", "D2", 22)
+```
+### Day 6 
+```{r day6exp5,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "5", "D6", 22)
+```
+:::
+## EXP0007
+::: {.panel-tabset}
+### Day 2
+```{r day2exp7,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "7", "D2", 22)
+```
+### Day 6 
+```{r day6exp7,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "7", "D6", 22)
+```
+:::
+## EXP0009
+::: {.panel-tabset}
+### Day 2
+```{r day2exp9,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "9", "D2", 22)
+```
+### Day 6 
+```{r day6exp9,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "9", "D6", 22)
+```
+:::
+## EXP0010
+::: {.panel-tabset}
+### Day 2
+```{r day2exp10,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "10", "D2", 22)
+```
+### Day 6 
+```{r day6exp10,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "10", "D6", 22)
+```
+:::
+## EXP0012
+::: {.panel-tabset}
+### Day 2
+```{r day2exp12,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "12", "D2", 22)
+```
+### Day 6 
+```{r day6exp12,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "12", "D6", 22)
+```
+:::
+## EXP0019
+::: {.panel-tabset}
+### Day 2
+```{r day2exp19,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "19", "D2", 22)
+```
+:::
+## EXP0020
+::: {.panel-tabset}
+### Day 2
+```{r day2exp20,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "20", "D2", 22)
+```
+### Day 6 
+```{r day6exp20,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "20", "D6", 22)
+```
+:::
+## EXP0024
+::: {.panel-tabset}
+### Day 2
+```{r day2exp24,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "24", "D2", 22)
+```
+:::
+## EXP0025
+::: {.panel-tabset}
+### Day 6 
+```{r day6exp25,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "25", "D6", 22)
+```
+:::
+## EXP0026
+::: {.panel-tabset}
+### Day 2
+```{r day2exp26,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "EXP0026", "D2", 22)
+```
+### Day 6 
+```{r day6exp26,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "EXP0026", "D6", 22)
+```
+:::
+## EXP0027
+::: {.panel-tabset}
+### Day 2 
+```{r fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "EXP0027", "D2", 22)
+```
+### Day 6 
+```{r fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
+create_boxplot(control_data_long, "EXP0027", "D6", 22)
+```
+:::
+::::
+:::::
