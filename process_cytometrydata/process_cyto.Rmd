@@ -58,3 +58,7 @@ library(bbplot)
 library(ggpubr)
 library(plotly)
 ```
+
+```{r load_data, message=FALSE, warning=FALSE, echo=FALSE}
+raw_data <- read.table("raw3.txt", sep = "\t", dec = ",", header = TRUE)
+```
