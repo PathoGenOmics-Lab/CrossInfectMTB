@@ -62,3 +62,38 @@ library(plotly)
 ```{r load_data, message=FALSE, warning=FALSE, echo=FALSE}
 raw_data <- read.table("raw3.txt", sep = "\t", dec = ",", header = TRUE)
 ```
+
+# Controls
+First, I analyze the controls for each experiment and cell type, summarizing their count (N), mean, median, maximum, minimum, and standard deviation.
+```{r stats_table, message=FALSE, warning=FALSE}
+control_cols <- grep("Control", names(raw_data), value = TRUE)
+control_data <- raw_data[c("Experiment", "Strain", "Day", "Cell", "Cell_Type",
+                           control_cols)]
+control_data_unique <- unique(control_data)
+
+control_data_long <- control_data_unique %>%
+  pivot_longer(cols = c(ControlAN1, ControlAN2, ControlAN3, ControlAN4,
+                        ControlAN5, ControlAN6, ControlAN7, ControlAN8),
+               names_to = "Control",
+               values_to = "Value") %>%
+  pivot_longer(cols = c(ControlAN1_ID, ControlAN2_ID, ControlAN3_ID,
+                        ControlAN4_ID, ControlAN5_ID, ControlAN6_ID,
+                        ControlAN7_ID, ControlAN8_ID),
+               names_to = "Control_ID",
+               values_to = "ID") %>%
+  filter(sub("ControlAN", "", Control) == sub("ControlAN", "",
+                                              sub("_ID", "", Control_ID)))
+control_data_long$Control_ID <- NULL
+stats <- na.omit(control_data_long)
+estadisticos <- stats %>%
+  group_by(Experiment, Strain, Day, Cell, Cell_Type) %>%
+  summarise(
+    N = n(),
+    mean = mean(Value, na.rm = TRUE),
+    median = median(Value, na.rm = TRUE),
+    min = min(Value, na.rm = TRUE),
+    max = max(Value, na.rm = TRUE),
+    sd = sd(Value, na.rm = TRUE)
+  )
+datatable(estadisticos)
+```
