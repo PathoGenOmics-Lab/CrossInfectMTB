@@ -97,3 +97,6 @@ estadisticos <- stats %>%
   )
 datatable(estadisticos)
 ```
+## Visualization of Controls 
+To visualize the data, I plot ALL the controls, where each point represents a control, including replicates. The plot does not represent means; each point signifies the control sample and its corresponding percentage value.
+**Note that there may be points exceeding the value of 60 Necrotic day 2, as the initial filtering is based on the average of the control replicates.**
