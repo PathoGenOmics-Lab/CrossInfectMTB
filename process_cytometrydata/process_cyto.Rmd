@@ -1,0 +1,24 @@
+---
+title: "Cytometry Analysis"
+author: "Paula Ruiz Rodriguez"
+date: today
+date-format: "DD/MM/YYYY"
+format:
+  html: 
+    code-fold: true
+    page-layout: article
+    embed-resources: true
+    smooth-scroll: true
+    theme: minty
+    toc: true
+    toc-depth: 5
+    toc-location: left
+    toc-title: Summary
+    number-sections: true
+    grid:
+      sidebar-width: 200px
+      body-width: 1200px
+      margin-width: 100px
+      gutter-width: 1.5rem  
+editor: visual
+---
