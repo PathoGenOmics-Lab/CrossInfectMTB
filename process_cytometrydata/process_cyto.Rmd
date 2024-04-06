@@ -39,3 +39,22 @@ script src = "https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"
     });
   });
 ```
+
+```{r libraries, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(mycolorsTB)
+library(tidyr)
+library(plotly)
+library(DT)
+library(MASS)
+library(ggfortify)
+library("FactoMineR")
+library("factoextra")
+library(cluster)
+library(corrplot)
+library(ggpattern)
+library(bbplot)
+library(ggpubr)
+library(plotly)
+```
