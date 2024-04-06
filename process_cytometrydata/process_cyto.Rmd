@@ -346,3 +346,365 @@ create_boxplot(control_data_long, "EXP0027", "D6", 22)
 :::
 ::::
 :::::
+# DATA
+## Get LogFoldChange
+### Statistics
+```{r, message=FALSE, warning=FALSE}
+control_cols <- grep("^ControlAN[0-9]+$", names(raw_data), value = TRUE)
+
+raw_data$mean_control <- rowMeans(raw_data[control_cols], na.rm = TRUE)
+
+raw_data$logfold <- raw_data$Cyto_Value / raw_data$mean_control
+
+estadisticos2 <- raw_data %>%
+  group_by(Experiment, Strain, Day, Cell, Cell_Type) %>%
+  summarise(
+    N = n(),
+    mean = mean(logfold, na.rm = TRUE),
+    median = median(logfold, na.rm = TRUE),
+    min = min(logfold, na.rm = TRUE),
+    max = max(logfold, na.rm = TRUE),
+    sd = sd(logfold, na.rm = TRUE)
+  )
+datatable(estadisticos2)
+
+raw_data$ControlAN1 <- NULL
+raw_data$ControlAN2 <- NULL
+raw_data$ControlAN3 <- NULL
+raw_data$ControlAN4 <- NULL
+raw_data$ControlAN5 <- NULL
+raw_data$ControlAN6 <- NULL
+raw_data$ControlAN7 <- NULL
+raw_data$ControlAN8 <- NULL
+raw_data$ControlAN1_ID <- NULL
+raw_data$ControlAN2_ID <- NULL
+raw_data$ControlAN3_ID <- NULL
+raw_data$ControlAN4_ID <- NULL
+raw_data$ControlAN5_ID <- NULL
+raw_data$ControlAN6_ID <- NULL
+raw_data$ControlAN7_ID <- NULL
+raw_data$ControlAN8_ID <- NULL
+raw_data$Cyto_Value <- NULL
+raw_data$Mean_Control <- NULL
+raw_data$mean_control <- NULL
+```
+
+### Normality Test
+::::: {.panel-tabset}
+# Shapiro-Wilk Test
+
+```{r}
+shapiro_original <- shapiro.test(raw_data$logfold)
+print(shapiro_original)
+```
+# Histogram
+```{r}
+p1 <- ggplot(raw_data, aes(x = logfold)) +
+    geom_histogram(bins = 30, fill = "blue", color = "black") +
+    theme_minimal() +
+    labs(title = "Histogram logfold", x = "logfold", y = "Frequency")
+print(p1)
+```
+
+# Q-Q Plot
+```{r}
+qqnorm(raw_data$logfold)
+qqline(raw_data$logfold, col = "red")
+```
+:::::
+### Visualization of LogFoldChange
+::::: {.panel-tabset}
+# Split by Day
+:::: {.panel-tabset}
+## Day 2
+```{r fig.height=6, fig.width=14, warning=FALSE}
+my_comparisons <- list( c("A4", "L5"),c("L5","L6"),c("A1","A4"),c("L6","A4"),c("L5","A1"),c("L6","A1"))
+# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
+filter_Day2 <- filter(raw_data, Day == "D2")
+
+conteos <- filter_Day2 %>%
+  group_by(Strain, Cell, Cell_Type) %>%
+  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(shape = Experiment, fill = Strain), 
+              position = position_jitter(width = 0.2), 
+              size = 2, 
+              alpha = 0.4) +
+  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() +
+  theme_bw() +
+  labs(y = "LogFoldChante", x = "Strain", title = "Day 2") +
+  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
+  theme(axis.title = element_text(size = rel(1.5)),
+        axis.text = element_text(size = rel(1.2)),
+        plot.title = element_text(size = rel(1.8)),
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+            position = position_dodge(width = 0.75),
+            size = 3, vjust = 0) + stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
+boxplotD2
+```
+## Day 6
+```{r fig.height=6, fig.width=14, warning=FALSE}
+filter_Day2 <- filter(raw_data, Day == "D6")
+
+conteos <- filter_Day2 %>%
+  group_by(Strain, Cell, Cell_Type) %>%
+  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(shape = Experiment, fill = Strain), 
+              position = position_jitter(width = 0.2), 
+              size = 2, 
+              alpha = 0.4) +
+  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() +
+  theme_bw() +
+  labs(y = "LogFoldChante", x = "Strain", title = "Day 6") +
+  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
+  theme(axis.title = element_text(size = rel(1.5)),  
+        axis.text = element_text(size = rel(1.2)),  
+        plot.title = element_text(size = rel(1.8)),  
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0)+ stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
+
+boxplotD2
+```
+::::
+# Split by Experiment
+:::: {.panel-tabset}
+## EXP0026
+::: {.panel-tabset}
+### Day 2
+```{r fig.height=6, fig.width=14, warning=FALSE}
+# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
+filter_Day2 <- filter(raw_data, Day == "D2", Experiment == "EXP0026")
+
+conteos <- filter_Day2 %>%
+  group_by(Strain, Cell, Cell_Type) %>%
+  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+
+# Crear el gráfico boxplot
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(shape = Experiment, fill = Strain), 
+              position = position_jitter(width = 0.2), 
+              size = 2, 
+              alpha = 0.4) +
+  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() +
+  theme_bw() +
+  labs(y = "LogFoldChante", x = "Strain", title = "Day 2") +
+  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
+  theme(axis.title = element_text(size = rel(1.5)),  
+        axis.text = element_text(size = rel(1.2)),  
+        plot.title = element_text(size = rel(1.8)),  
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0)+ stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
+
+boxplotD2
+```
+### Day 6
+```{r fig.height=6, fig.width=14, warning=FALSE}
+# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
+filter_Day2 <- filter(raw_data, Day == "D6", Experiment == "EXP0026")
+
+conteos <- filter_Day2 %>%
+  group_by(Strain, Cell, Cell_Type) %>%
+  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+
+# Crear el gráfico boxplot
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(shape = Experiment, fill = Strain), 
+              position = position_jitter(width = 0.2), 
+              size = 2, 
+              alpha = 0.4) +
+  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() +
+  theme_bw() +
+  labs(y = "LogFoldChante", x = "Strain", title = "Day 2") +
+  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
+  theme(axis.title = element_text(size = rel(1.5)),  
+        axis.text = element_text(size = rel(1.2)),  
+        plot.title = element_text(size = rel(1.8)),  
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0)+ stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
+
+boxplotD2
+```
+:::
+## EXP0027
+::: {.panel-tabset}
+### Day 2
+```{r fig.height=6, fig.width=14, warning=FALSE}
+# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
+filter_Day2 <- filter(raw_data, Day == "D2", Experiment == "EXP0027")
+
+conteos <- filter_Day2 %>%
+  group_by(Strain, Cell, Cell_Type) %>%
+  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+
+# Crear el gráfico boxplot
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(shape = Experiment, fill = Strain), 
+              position = position_jitter(width = 0.2), 
+              size = 2, 
+              alpha = 0.4) +
+  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() +
+  theme_bw() +
+  labs(y = "LogFoldChante", x = "Strain", title = "Day 2") +
+  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
+  theme(axis.title = element_text(size = rel(1.5)),  
+        axis.text = element_text(size = rel(1.2)),  
+        plot.title = element_text(size = rel(1.8)),  
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0)+ stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
+
+boxplotD2
+```
+### Day 6
+```{r fig.height=6, fig.width=14, warning=FALSE}
+# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
+filter_Day2 <- filter(raw_data, Day == "D6", Experiment == "EXP0027")
+
+conteos <- filter_Day2 %>%
+  group_by(Strain, Cell, Cell_Type) %>%
+  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+
+# Crear el gráfico boxplot
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(shape = Experiment, fill = Strain), 
+              position = position_jitter(width = 0.2), 
+              size = 2, 
+              alpha = 0.4) +
+  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
+  mycolorsTB::scale_color_mycolors() +
+  mycolorsTB::scale_fill_mycolors() +
+  theme_bw() +
+  labs(y = "LogFoldChante", x = "Strain", title = "Day 2") +
+  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
+  theme(axis.title = element_text(size = rel(1.5)),  
+        axis.text = element_text(size = rel(1.2)),  
+        plot.title = element_text(size = rel(1.8)),  
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0)+ stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
+
+boxplotD2
+```
+:::
+::::
+# Compare Cell Hosts
+:::: {.panel-tabset}
+## Split by Day
+::: {.panel-tabset}
+### Day 2
+```{r fig.height=6, fig.width=8, warning=FALSE}
+filter_Day2 <- filter(raw_data, Day == "D2")
+conteos <- filter_Day2 %>%
+  group_by(Strain, Cell, Cell_Type) %>%
+  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+# Crear el gráfico boxplot con patrones
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, pattern = Cell, fill=Strain, color=Cell)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = Cell), size=2, alpha=.5,position = position_jitterdodge()) + 
+facet_wrap(~ Cell_Type, nrow = 2, scales = "free_y") +
+theme_bw() +
+labs(y = "Log-fold Change", x = "Strain", title = "Day 2") +
+theme(axis.title = element_text(size = rel(1.5)),
+axis.text = element_text(size = rel(1.2)),
+plot.title = element_text(size = rel(1.8)),
+strip.text = element_text(size = rel(1.2))) +
+geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+position = position_dodge(width = 0.75),
+size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))
+boxplotD2+ stat_compare_means(aes(group = Cell), method="wilcox.test", label = "p.signif")
+```
+### Day 6
+```{r fig.height=6, fig.width=8, warning=FALSE}
+filter_Day6 <- filter(raw_data, Day == "D6")
+conteos <- filter_Day6 %>%
+  group_by(Strain, Cell, Cell_Type) %>%
+  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+# Crear el gráfico boxplot con patrones
+boxplotD6 <- ggplot(filter_Day6, aes(x = Strain, y = logfold, pattern = Cell, fill=Strain, color=Cell)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = Cell), size=2, alpha=.5,position = position_jitterdodge()) + 
+facet_wrap(~ Cell_Type, nrow = 2, scales = "free_y") +
+theme_bw() +
+labs(y = "Log-fold Change", x = "Strain", title = "Day 6") +
+theme(axis.title = element_text(size = rel(1.5)),
+axis.text = element_text(size = rel(1.2)),
+plot.title = element_text(size = rel(1.8)),
+strip.text = element_text(size = rel(1.2))) +
+geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+position = position_dodge(width = 0.75),
+size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))
+boxplotD6+ stat_compare_means(aes(group = Cell), method="wilcox.test", label = "p.signif")
+```
+:::
+## Split by Cell check time progression
+::: {.panel-tabset}
+## THP-1
+```{r fig.height=6, fig.width=8, message=FALSE, warning=FALSE}
+filter_Day2 <- filter(raw_data, Cell == "THP1")
+conteos <- filter_Day2 %>%
+  group_by(Strain, Day, Cell_Type) %>%
+  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+# Crear el gráfico boxplot con patrones
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, pattern = Day, fill=Strain, color=Day)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = Day), size=2, alpha=.5,position = position_jitterdodge()) + theme_bw()+
+facet_wrap(~ Cell_Type, nrow = 2, scales = "free_y") +
+labs(y = "Log-fold Change", x = "", title = "THP-1") +
+theme(axis.title = element_text(size = rel(1.5)),
+axis.text = element_text(size = rel(1.2)),
+plot.title = element_text(size = rel(1.8)),
+strip.text = element_text(size = rel(1.2))) +
+geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+position = position_dodge(width = 0.75),
+size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))  
+boxplotD2+ stat_compare_means(aes(group = Day), method="wilcox.test", label = "p.signif") + labs(y = "Log-fold Change", x = "", title = "THP-1") 
+
+```
+## BoMac
+```{r fig.height=6, fig.width=8, message=FALSE, warning=FALSE}
+filter_Day2 <- filter(raw_data, Cell == "BoMac")
+conteos <- filter_Day2 %>%
+  group_by(Strain, Day, Cell_Type) %>%
+  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+# Crear el gráfico boxplot con patrones
+boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, pattern = Day, fill=Strain, color=Day)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = Day), size=2, alpha=.5,position = position_jitterdodge()) +theme_bw()+ 
+facet_wrap(~ Cell_Type, nrow = 2, scales = "free_y") +
+labs(y = "Log-fold Change", x = "", title = "BoMac")  +
+theme(axis.title = element_text(size = rel(1.5)),
+axis.text = element_text(size = rel(1.2)),
+plot.title = element_text(size = rel(1.8)),
+strip.text = element_text(size = rel(1.2)))+
+geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+position = position_dodge(width = 0.75),
+size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))
+boxplotD2+ stat_compare_means(aes(group = Day), method="wilcox.test", label = "p.signif")
+```
+:::
+::::
+:::::
