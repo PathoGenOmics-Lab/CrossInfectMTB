@@ -17,3 +17,12 @@ STAR --runThreadN 16 \
      --sjdbOverhang 100
 ## Generate transcripts files for salmon
 gffread -w transcritos_human.fa -g GCF_000001405.26_GRCh38_genomic.fna GCF_000001405.26_GRCh38_genomic.gff
+
+# Mapping with STAR
+STAR --genomeDir references/human_index \
+     --readFilesIn /R0320_S14_L001_R1_001_out.fastq.gz,/R0320_S14_L001_R2_001_out.fastq.gz,/R0320_S14_L002_R1_001_out.fastq.gz,/R0320_S14_L002_R2_001_out.fastq.gz,/R0320_S14_L003_R1_001_out.fastq.gz,/R0320_S14_L003_R2_001_out.fastq.gz,/R0320_S14_L004_R1_001_out.fastq.gz,/R0320_S14_L004_R2_001_out.fastq.gz \
+     --runThreadN 64 \
+     --outFileNamePrefix sample_THP1-L5_R0320_S14/ \
+     --outSAMtype BAM SortedByCoordinate \
+     --outSAMunmapped Within KeepPairs \
+     --readFilesCommand zcat 
