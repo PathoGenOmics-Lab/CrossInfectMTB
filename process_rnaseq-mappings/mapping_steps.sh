@@ -8,3 +8,10 @@ bbduk.sh in1=file_1.fastq in2=file_2.fastq out1=file_out_1.fastq out2=file_out_2
 # Prepare references
 ## Transfor annotation gff to gtf (cufflinks)
 gffread GCF_000001405.26_GRCh38_genomic.gff -T -o GCF_000001405.26_GRCh38_genomic.gtf
+## Create index with STAR
+STAR --runThreadN 16 \
+     --runMode genomeGenerate \
+     --genomeDir human_index \
+     --genomeFastaFiles GCF_000001405.26_GRCh38_genomic.fna \
+     --sjdbGTFfile GCF_000001405.26_GRCh38_genomic.gtf \
+     --sjdbOverhang 100
