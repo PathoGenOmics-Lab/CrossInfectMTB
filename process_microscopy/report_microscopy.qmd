@@ -1,0 +1,599 @@
+---
+title: "Microscopy Analysis"
+author: "Paula Ruiz Rodriguez"
+date: today
+date-format: "DD/MM/YYYY"
+format:
+  html: 
+    code-fold: true
+    page-layout: article
+    embed-resources: true
+    smooth-scroll: true
+    theme: minty
+    toc: true
+    toc-depth: 5
+    toc-location: left
+    toc-title: Summary
+    number-sections: true
+    grid:
+      sidebar-width: 200px
+      body-width: 1200px
+      margin-width: 100px
+      gutter-width: 1.5rem  
+editor: visual
+---
+
+```{css zoom-lib-src, echo = FALSE}
+script src = "https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"
+```
+
+```{js zoom-jquery, echo = FALSE}
+ $(document).ready(function() {
+    $('body').prepend('<div class=\"zoomDiv\"><img src=\"\" class=\"zoomImg\"></div>');
+    // onClick function for all plots (img's)
+    $('img:not(.zoomImg)').click(function() {
+      $('.zoomImg').attr('src', $(this).attr('src')).css({width: '100%'});
+      $('.zoomDiv').css({opacity: '1', width: 'auto', border: '1px solid white', borderRadius: '5px', position: 'fixed', top: '50%', left: '50%', marginRight: '-50%', transform: 'translate(-50%, -50%)', boxShadow: '0px 0px 50px #888888', zIndex: '50', overflow: 'auto', maxHeight: '100%'});
+    });
+    // onClick function for zoomImg
+    $('img.zoomImg').click(function() {
+      $('.zoomDiv').css({opacity: '0', width: '0%'}); 
+    });
+  });
+```
+
+```{r libraries, message=FALSE, warning=FALSE, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(mycolorsTB)
+library(tidyr)
+library(DT)
+library(corrplot)
+library(ggpubr)
+library(dunn.test)
+library(ggthemes)
+library(ggsimplestats)
+library(rstatix)
+library(purrr)
+```
+
+
+# Test normality distribution of data
+```{r,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+micro_data <- read.table("micro_recuento_2024_all.txt", sep = "\t", header = TRUE, dec = ".")
+shapiro_test <- shapiro.test(micro_data$Micro_Value)
+
+print(shapiro_test)
+
+qqnorm(micro_data$Micro_Value, main = "Q-Q Plot for Micro_Value")
+qqline(micro_data$Micro_Value, col = "red", lwd = 2)
+```
+
+
+# General Statistics
+```{r,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+estadisticos <- micro_data %>% 
+  group_by(Strain, Cell, Micro_Day,INF_Date) %>% 
+  summarise(
+    N = n(),
+    mean = mean(Micro_Value, na.rm = TRUE),
+    median = median(Micro_Value, na.rm = TRUE),
+    min = min(Micro_Value, na.rm = TRUE),
+    max = max(Micro_Value, na.rm = TRUE),
+    sd = sd(Micro_Value, na.rm = TRUE)
+  )
+datatable(estadisticos)
+```
+
+# Comparisons
+## Comparisons for day and type of Cell
+
+```{r fig.height=9, fig.width=4,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+my_comparisons <- list( c("A4", "L5"),c("L5","L6"),c("A1","A4"),c("L6","A4"),c("L5","A1"),c("L6","A1"))
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$Micro_Value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$Micro_Value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+
+
+dunn_results <- micro_data %>%
+  group_by(Micro_Day,Cell) %>%
+  dunn_test(Micro_Value ~ Strain) %>%
+  group_by(Micro_Day,Cell) %>%  # Mantener el agrupamiento para aplicar la corrección
+  adjust_pvalue(method = "BH") %>%
+  add_significance() %>%
+  ungroup()  
+
+bounds <- micro_data %>%
+  group_by(Strain, Micro_Day) %>%
+  do(calculate_bounds(.))
+micro_data <- micro_data %>% 
+  left_join(bounds, by = c("Strain", "Micro_Day"))
+conteos <- micro_data %>%
+  group_by(Cell,Strain, Micro_Day) %>%
+  summarize(N = sum(!is.na(Micro_Value)), max_value = max(Micro_Value, na.rm = TRUE), .groups = 'drop')
+
+boxplot_Day2_thp1 <- ggplot(micro_data, aes(x = Strain, y = Micro_Value)) +
+  geom_boxplot(aes(color = Strain), outlier.shape = NA)+
+  facet_wrap(Micro_Day ~ Cell, nrow = 3) +  # Color por cepa para el boxplot
+  geom_jitter(aes(color = Strain, fill= Strain, 
+                  shape = Cell), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4)+
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +  
+  scale_fill_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +  
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) 
+
+boxplot_Day2_thp1 + stat_kwAllPairsDunnTest()
+```
+## Comparisons by compatibilities
+```{r}
+my_comparisons <- list( c("High", "Intermediate"), c("Low", "Intermediate"), c("High", "Low"))
+micro_data2 <- read.table("micro2.txt", sep = "\t", header = TRUE, dec = ".")
+micro_data_zero_day <- micro_data2 
+
+conteos <- micro_data_zero_day %>%
+  group_by(Compatibility, Micro_Day) %>%
+  summarize(N = sum(!is.na(Micro_Value)), max_value = max(Micro_Value, na.rm = TRUE), .groups = 'drop')
+
+medias <- micro_data_zero_day %>%
+  group_by(Compatibility, Micro_Day) %>%
+  summarize(
+    N = sum(!is.na(Micro_Value)),
+    max_value = max(Micro_Value, na.rm = TRUE), 
+    mean_value = mean(Micro_Value, na.rm = TRUE),  
+    sd_value = sd(Micro_Value, na.rm = TRUE),  
+    sem_value = sd(Micro_Value, na.rm = TRUE) / sqrt(N), 
+    .groups = 'drop' 
+  )
+
+dunn_results <- micro_data_zero_day %>%
+  group_by(Micro_Day) %>%
+  dunn_test(Micro_Value ~ Compatibility) %>%
+  group_by(Micro_Day) %>% 
+  adjust_pvalue(method = "BH") %>%
+  add_significance() %>%
+  ungroup()  
+
+boxplot_Day2_thp1 <- ggplot(micro_data_zero_day, aes(x = Compatibility, y = Micro_Value)) +
+  geom_boxplot(aes(color = Compatibility), outlier.shape = NA)+
+  facet_wrap(~ Micro_Day, nrow = 1) +
+
+  geom_jitter(aes(fill = Strain, color = Strain, 
+                  shape = Cell), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4)+
+  scale_fill_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040"))+ 
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb","#e76f51","#e9c46a","#995200", "#1eb040", "#2a9d8f"))+  
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) + theme_pubr()
+
+boxplot_Day2_thp1 + stat_compare_means(aes(group = Compatibility,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")+  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+boxplot_Day2_thp1 + 
+  stat_kwAllPairsDunnTest()
+```
+
+## Split by cell and day
+```{r fig.height=4, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+micro_data$Micro_Day<- as.factor(micro_data$Micro_Day)
+
+my_comparisons <- list( c("A4", "L5"),c("L5","L6"),c("A1","A4"),c("L6","A4"),c("L5","A1"),c("L6","A1"))
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$Micro_Value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$Micro_Value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- micro_data %>%
+  group_by(Strain, Micro_Day) %>%
+  do(calculate_bounds(.))
+micro_data <- micro_data %>% 
+  left_join(bounds, by = c("Strain", "Micro_Day"))
+conteos <- micro_data %>%
+  group_by(Cell,Strain, Micro_Day) %>%
+  summarize(N = sum(!is.na(Micro_Value)), max_value = max(Micro_Value, na.rm = TRUE), .groups = 'drop')
+boxplot_Day2_thp1 <- ggplot(micro_data, aes(x = Strain, y = Micro_Value, fill=Micro_Day)) +
+  geom_boxplot(aes(color = Strain), outlier.shape = NA)+
+  facet_wrap( ~ Cell, nrow = 1, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +  
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) 
+
+
+print(boxplot_Day2_thp1)
+```
+
+## Split by cell and strain
+```{r fig.height=6, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+micro_data$Micro_Day<- as.factor(micro_data$Micro_Day)
+
+my_comparisons <- list( c("0", "1"),c("1","3"),c("0","3"))
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$Micro_Value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$Micro_Value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- micro_data %>%
+  group_by(Strain, Micro_Day) %>%
+  do(calculate_bounds(.))
+micro_data <- micro_data %>% 
+  left_join(bounds, by = c("Strain", "Micro_Day"))
+conteos <- micro_data %>%
+  group_by(Cell,Strain, Micro_Day) %>%
+  summarize(N = sum(!is.na(Micro_Value)), max_value = max(Micro_Value, na.rm = TRUE), .groups = 'drop')
+boxplot_Day2_thp1 <- ggplot(micro_data, aes(x = Micro_Day, y = Micro_Value)) +
+  geom_boxplot(aes(color = Strain), outlier.shape = NA)+
+  geom_jitter(aes(color = Strain, 
+                  shape = INF_Date), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4)+
+  facet_wrap( Strain ~ Cell, nrow = 2, scales = "free_y") +  
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +  
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) 
+
+
+show(boxplot_Day2_thp1+ stat_kwAllPairsDunnTest())
+```
+
+## Spliy by Strain
+```{r fig.height=6, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+micro_data$Micro_Day<- as.factor(micro_data$Micro_Day)
+
+my_comparisons <- list( c("A4", "L5"),c("L5","L6"),c("A1","A4"),c("L6","A4"),c("L5","A1"),c("L6","A1"))
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$Micro_Value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$Micro_Value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- micro_data %>%
+  group_by(Strain, Micro_Day) %>%
+  do(calculate_bounds(.))
+micro_data <- micro_data %>% 
+  left_join(bounds, by = c("Strain", "Micro_Day"))
+
+conteos2 <- micro_data %>%
+  group_by(Cell,Strain, Micro_Day) %>%
+  summarize(
+    N = sum(!is.na(Micro_Value)),
+    max_value = max(Micro_Value, na.rm = TRUE),
+    mean_value = mean(Micro_Value, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+conteos <- micro_data %>%
+  group_by(Cell,Strain, Micro_Day) %>%
+  summarize(N = sum(!is.na(Micro_Value)), max_value = max(Micro_Value, na.rm = TRUE), .groups = 'drop')
+boxplot_Day2_thp1 <- ggplot(micro_data, aes(x = Micro_Day, y = Micro_Value, fill=Cell)) +
+  geom_boxplot(aes(color = Strain), outlier.shape = NA)+  # Color por cepa para el boxplot
+  geom_point(aes(shape = Cell), size=2, alpha=.5,position = position_jitterdodge()) +
+  facet_wrap( ~ Strain, nrow = 2, scales = "free_y") +  # Color por cepa para el boxplot
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +  
+  scale_fill_manual(values = c("#e8e8e8","#caebfa")) + 
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) 
+
+# Mostrar el gráfico
+show(boxplot_Day2_thp1+ stat_compare_means(aes(group = Cell), method="wilcox.test", label = "p.signif")+
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 10),
+    plot.title = element_text(size = 14), 
+  strip.text.x = element_text(size = 14))
+  )
+
+medias <- micro_data %>%
+  group_by(Cell,Strain, Micro_Day) %>%
+  summarize(
+    N = sum(!is.na(Micro_Value)),
+    max_value = max(Micro_Value, na.rm = TRUE),
+    mean_value = mean(Micro_Value, na.rm = TRUE),
+    sd_value = sd(Micro_Value, na.rm = TRUE),
+    sem_value = sd(Micro_Value, na.rm = TRUE) / sqrt(N),
+    .groups = 'drop'  
+  )
+```
+
+## Dynamics
+### Dynamics with points
+```{r fig.height=6, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+boxplot_Day2_thp1 <- ggplot(micro_data, aes(x = Micro_Day, y = Micro_Value, group = Strain, color = Strain)) +
+  geom_jitter(aes(shape = INF_Date), position = position_jitter(width = 0.2), size = 2, alpha = 0.4) +
+  facet_wrap(Strain ~ Cell, nrow = 2, scales = "free_y") +  
+  
+  stat_summary(fun.data = mean_cl_normal, geom = "line", aes(linetype = Strain)) +
+  stat_summary(fun.data = mean_cl_normal, geom = "ribbon", aes(ymin = ..ymin.., ymax = ..ymax..), alpha = 0.2) +
+  
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +  
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  scale_linetype_manual(values = c("solid", "dashed", "dotted", "dotdash", "longdash", "twodash")) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), position = position_dodge(width = 0.75), size = 3, vjust = 0) +
+  
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Strain Type", linetype = "Strain Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+print(boxplot_Day2_thp1)
+```
+
+### Dynamics with areas
+```{r fig.height=6, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+
+micro_data <- read.table("micro_recuento_2024_all.txt", sep = "\t", header = TRUE, dec = ".")
+
+micro_data$Micro_Day<- as.numeric(micro_data$Micro_Day)
+boxplot_Day2_thp1 <- ggplot(micro_data, aes(x = Micro_Day, y = Micro_Value, group = Strain)) +
+  facet_wrap(Strain ~ Cell, nrow = 2, scales = "free_y") +
+  
+  stat_summary(fun = mean, geom = "point", aes(color = Strain), size = 3) +
+  
+  stat_summary(fun = mean, geom = "line", aes(color = Strain), size = 1) +
+  
+  stat_summary(fun.data = mean_cl_normal, geom = "ribbon", aes(ymin = ..ymin.., ymax = ..ymax.., fill = Strain), alpha = 0.2) +
+  
+  # Barras de error para las medias
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(ymin = ..ymin.., ymax = ..ymax.., color = Strain), width = 0.2) +
+  
+  scale_fill_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +  
+  
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Strain Type", fill = "Strain Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+boxplot_Day2_thp1+ theme(legend.position="none")
+```
+### Dynamics points and lines
+```{r fig.height=3, fig.width=6,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+library(ggplot2)
+library(dplyr)
+micro_data <- read.table("micro_recuento_2024_all.txt", sep = "\t", header = TRUE, dec = ".")
+
+boxplot_Day2_thp1 <- ggplot(micro_data, aes(x = Micro_Day, y = Micro_Value, group = Strain)) +
+  facet_wrap( ~ Cell, nrow = 1, scales = "free_y") +
+  
+  stat_summary(fun = mean, geom = "point", aes(color = Strain), size = 3) +
+  
+  stat_summary(fun = mean, geom = "line", aes(color = Strain), size = 1) +
+  
+  
+  scale_fill_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +  
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Strain Type", fill = "Strain Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+boxplot_Day2_thp1+ theme(legend.position="none")
+```
+
+
+### Splitted by strain
+```{r fig.height=3, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+micro_data <- read.table("micro_recuento_2024_all.txt", sep = "\t", header = TRUE, dec = ".")
+micro_data <- micro_data %>%
+  filter(Micro_Day != 0)
+
+boxplot_Day2_thp1 <- ggplot(micro_data, aes(x = Micro_Day, y = Micro_Value)) +
+  facet_wrap(~Strain, nrow = 1) +
+  stat_summary(fun = mean, geom = "point", aes(color = Strain, shape = Cell, group = Cell), size = 3) +
+  stat_summary(fun = mean, geom = "line", aes(color = Strain, group = Cell, linetype = Cell), size = 1.2) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(color = Strain, group = Cell), width = 0.2, size = 0.5) +
+  scale_fill_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +  
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  scale_linetype_manual(values = c("solid", "dashed", "dotted", "dotdash", "longdash", "twodash")) +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Strain Type", fill = "Strain Type", shape = "Cell Type", linetype = "Line Style") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  scale_x_continuous(breaks = c(1, 3), labels = scales::label_number(auto = TRUE))+
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 10),
+    plot.title = element_text(size = 14),
+  strip.text.x = element_text(size = 14))
+  
+
+print(boxplot_Day2_thp1 + theme(legend.title = element_text(size = 9), legend.text = element_text(size = 9)))
+```
+
+
+
+
+```{r fig.height=7, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+
+micro_data$Micro_Day<- as.numeric(micro_data$Micro_Day)
+boxplot_Day2_thp1 <- ggplot(micro_data, aes(x = Micro_Day, y = Micro_Value, group = Strain)) +
+  facet_wrap(Strain ~ Cell, nrow = 2, scales = "free_y") +
+  
+  stat_summary(fun = mean, geom = "point", aes(color = Strain), size = 3) +
+  
+  stat_summary(fun = mean, geom = "line", aes(color = Strain), size = 1) +
+  
+  stat_summary(fun.data = mean_cl_normal, geom = "ribbon", aes(ymin = ..ymin.., ymax = ..ymax.., fill = Strain), alpha = 0.2) +
+  
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(ymin = ..ymin.., ymax = ..ymax.., color = Strain), width = 0.2) +
+  
+  scale_fill_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +  
+  
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Strain Type", fill = "Strain Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+boxplot_Day2_thp1+ theme(legend.position="none")  +
+  scale_x_continuous(breaks = c(1, 3), labels = scales::label_number(auto = TRUE))
+```
+
+# Regressions
+## Intermedium
+```{r fig.height=5, fig.width=5,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+micro_data2 <- read.table("micro2.txt", sep = "\t", header = TRUE, dec = ".")
+micro_data <- micro_data2 %>%
+  mutate(Combo = paste(Strain, Cell, sep = "-"))
+micro_data <- micro_data %>%
+  filter(Micro_Day != 0)
+df_filtrado <- micro_data %>%
+  filter(Compatibility %in% c("Intermedium"))
+
+correlacion_kendall <- cor.test(df_filtrado$Micro_Day, df_filtrado$Micro_Value, method = "kendall")
+print(correlacion_kendall)
+
+modelo_lineal <- lm(Micro_Value ~ Micro_Day, data = df_filtrado)
+
+summary(modelo_lineal)
+
+coeficientes <- coef(modelo_lineal)
+cat("La ecuación de la regresión lineal es: Y =", coeficientes[1], "+", coeficientes[2], "* X\n")
+
+modelo_lineal <- lm(Micro_Value ~ Micro_Day, data = df_filtrado)
+
+resumen <- summary(modelo_lineal)
+beta <- coef(resumen)[2, 1]  # Coeficiente beta
+r_cuadrado <- resumen$r.squared  # R-cuadrado
+p_valor <- coef(resumen)[2, 4]  # p-valor para la pendiente
+
+plot <- ggplot(df_filtrado, aes(x = Micro_Day, y = Micro_Value)) +
+  geom_jitter(aes(color = Strain, 
+                  shape = Cell, alpha = 0.4), width = 0.1, height = 0.1, size = 2) +
+  geom_smooth(method = "lm", col = "#e9c46a", size=1.5)+
+  scale_color_manual(values = c("#d1ae00", "#1eb040")) +
+  labs(title = "Intermedium Compatibility",
+       x = "Days Post-Infection",
+       y = "Infection Ratio")+ theme_par()+ theme(legend.position = "none")
+plot
+```
+## Low
+```{r fig.height=5, fig.width=5,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+micro_data2 <- read.table("micro2.txt", sep = "\t", header = TRUE, dec = ".")
+micro_data <- micro_data2 %>%
+  mutate(Combo = paste(Strain, Cell, sep = "-"))
+micro_data <- micro_data %>%
+  filter(Micro_Day != 0)
+df_filtrado <- micro_data %>%
+  filter(Compatibility %in% c("Low"))
+
+correlacion_kendall <- cor.test(df_filtrado$Micro_Day, df_filtrado$Micro_Value, method = "kendall")
+print(correlacion_kendall)
+
+modelo_lineal <- lm(Micro_Value ~ Micro_Day, data = df_filtrado)
+
+summary(modelo_lineal)
+
+coeficientes <- coef(modelo_lineal)
+cat("La ecuación de la regresión lineal es: Y =", coeficientes[1], "+", coeficientes[2], "* X\n")
+
+modelo_lineal <- lm(Micro_Value ~ Micro_Day, data = df_filtrado)
+
+resumen <- summary(modelo_lineal)
+beta <- coef(resumen)[2, 1]  # Coeficiente beta
+r_cuadrado <- resumen$r.squared  # R-cuadrado
+p_valor <- coef(resumen)[2, 4]  # p-valor para la pendiente
+
+# Crear el plot con ggplot2
+plot <- ggplot(df_filtrado, aes(x = Micro_Day, y = Micro_Value)) +
+  geom_jitter(aes(color = Strain, 
+                  shape = Cell, alpha = 0.4), width = 0.1, height = 0.1, size = 2) +
+  geom_smooth(method = "lm", col = "#2a9d8f", size=1.5)+
+  scale_color_manual(values = c("#ff9cdb", "#995200")) +
+  labs(title = "Low Compatibility",
+       x = "Days Post-Infection",
+       y = "Infection Ratio")+ theme_par()+ theme(legend.position = "none")
+plot
+```
+
+## High
+```{r fig.height=5, fig.width=5,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+micro_data2 <- read.table("micro2.txt", sep = "\t", header = TRUE, dec = ".")
+micro_data <- micro_data2 %>%
+  mutate(Combo = paste(Strain, Cell, sep = "-"))
+micro_data <- micro_data %>%
+  filter(Micro_Day != 0)
+df_filtrado <- micro_data %>%
+  filter(Compatibility %in% c("High"))
+
+correlacion_kendall <- cor.test(df_filtrado$Micro_Day, df_filtrado$Micro_Value, method = "kendall")
+print(correlacion_kendall)
+
+modelo_lineal <- lm(Micro_Value ~ Micro_Day, data = df_filtrado)
+
+summary(modelo_lineal)
+
+coeficientes <- coef(modelo_lineal)
+cat("La ecuación de la regresión lineal es: Y =", coeficientes[1], "+", coeficientes[2], "* X\n")
+
+modelo_lineal <- lm(Micro_Value ~ Micro_Day, data = df_filtrado)
+
+resumen <- summary(modelo_lineal)
+beta <- coef(resumen)[2, 1]  
+r_cuadrado <- resumen$r.squared  
+p_valor <- coef(resumen)[2, 4]  
+
+# Crear el plot con ggplot2
+plot <- ggplot(df_filtrado, aes(x = Micro_Day, y = Micro_Value)) +
+  geom_jitter(aes(color = Strain, 
+                  shape = Cell, alpha = 0.4), width = 0.1, height = 0.1, size = 2) +
+  geom_smooth(method = "lm", col = "#e76f51", size=1.5)+
+  scale_color_manual(values = c("#ff9cdb", "#995200")) +
+  labs(title = "High Compatibility",
+       x = "Days Post-Infection",
+       y = "Infection Ratio")+ theme_par()+ theme(legend.position = "none")
+plot
+```
+
+```{r}
+sessionInfo()
+```
