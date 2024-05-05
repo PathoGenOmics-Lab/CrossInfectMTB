@@ -1,5 +1,5 @@
 ---
-title: "Cytometry Analysis"
+title: "Cytometry Analysis, > 1 LogFold Change"
 author: "Paula Ruiz Rodriguez"
 date: today
 date-format: "DD/MM/YYYY"
@@ -22,9 +22,11 @@ format:
       gutter-width: 1.5rem  
 editor: visual
 ---
+
 ```{css zoom-lib-src, echo = FALSE}
 script src = "https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"
 ```
+
 ```{js zoom-jquery, echo = FALSE}
  $(document).ready(function() {
     $('body').prepend('<div class=\"zoomDiv\"><img src=\"\" class=\"zoomImg\"></div>');
@@ -40,7 +42,7 @@ script src = "https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"
   });
 ```
 
-```{r libraries, message=FALSE, warning=FALSE}
+```{r libraries, message=FALSE, warning=FALSE, include=FALSE}
 library(dplyr)
 library(ggplot2)
 library(mycolorsTB)
@@ -57,578 +59,1261 @@ library(ggpattern)
 library(bbplot)
 library(ggpubr)
 library(plotly)
+library(dunn.test)
+library(ggthemes)
+library(rstatix)
+library(ggsimplestats)
 ```
 
-```{r load_data, message=FALSE, warning=FALSE, echo=FALSE}
-raw_data <- read.table("raw3.txt", sep = "\t", dec = ",", header = TRUE)
+Here we only remove controls that are outliers. We do the division of the samples between control and we only keep values \> 1. HERE I REMOVE THE EXPERIMENT 20231004 HERE I ONLY REMOVE VALUES \<= 1 NOT ALL THE SAMPLE
+
+# First, Check Controls
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+control_data <- read.table("control.txt", sep = "\t", header = TRUE, dec = ",")
+sample_data <- read.table("samples.txt", sep = "\t", header = TRUE, dec = ",")
+control_data <- na.omit(control_data)
+c_largo <- control_data %>%
+  pivot_longer(
+    cols = c(necrosis, late_apoptosis, early_apoptosis, live),
+    names_to = "condition",
+    values_to = "value"
+  )
+s_largo <- sample_data %>%
+  pivot_longer(
+    cols = c(necrosis, late_apoptosis, early_apoptosis, live),
+    names_to = "condition",
+    values_to = "value"
+  )
+
+resultado_join <- inner_join(s_largo, c_largo, by = c("filename", "condition","day","cell"))
+resultado_join <- resultado_join %>%
+  filter(experiment != 20231004)
+estat <-resultado_join
+estat$id<-NULL
+estat$type.x<-NULL
+estat$strain<-NULL
+estat$value.x<-NULL
+estat$filename.1<-NULL
+
+estat <- estat %>% 
+  distinct()
+conteos1 <- estat %>%
+  group_by(filename, cell,day,condition) %>%
+  summarize(N = n())
+registros_a_eliminar <- estat %>%
+  filter(day == 2, condition == "necrosis", value.y > 60)
+
+ids_a_eliminar <- registros_a_eliminar$sample.id
+estat2 <- estat
+controles_limpios <- estat %>%
+  filter(!(sampleid %in% ids_a_eliminar))
+controles_sucios <- estat %>%
+  filter((sampleid %in% ids_a_eliminar))
+
+conteos <- controles_sucios %>%
+  group_by(filename, cell,day,condition) %>%
+  summarize(N = n())
+
+estat <- controles_limpios
 ```
 
-# Controls
-First, I analyze the controls for each experiment and cell type, summarizing their count (N), mean, median, maximum, minimum, and standard deviation.
-```{r stats_table, message=FALSE, warning=FALSE}
-control_cols <- grep("Control", names(raw_data), value = TRUE)
-control_data <- raw_data[c("Experiment", "Strain", "Day", "Cell", "Cell_Type",
-                           control_cols)]
-control_data_unique <- unique(control_data)
+## Statistics for controls
 
-control_data_long <- control_data_unique %>%
-  pivot_longer(cols = c(ControlAN1, ControlAN2, ControlAN3, ControlAN4,
-                        ControlAN5, ControlAN6, ControlAN7, ControlAN8),
-               names_to = "Control",
-               values_to = "Value") %>%
-  pivot_longer(cols = c(ControlAN1_ID, ControlAN2_ID, ControlAN3_ID,
-                        ControlAN4_ID, ControlAN5_ID, ControlAN6_ID,
-                        ControlAN7_ID, ControlAN8_ID),
-               names_to = "Control_ID",
-               values_to = "ID") %>%
-  filter(sub("ControlAN", "", Control) == sub("ControlAN", "",
-                                              sub("_ID", "", Control_ID)))
-control_data_long$Control_ID <- NULL
-stats <- na.omit(control_data_long)
-estadisticos <- stats %>%
-  group_by(Experiment, Strain, Day, Cell, Cell_Type) %>%
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+estat <- estat %>% 
+  distinct()
+estadisticos <- estat %>% 
+  group_by(experiment, cell, condition, day) %>% 
   summarise(
     N = n(),
-    mean = mean(Value, na.rm = TRUE),
-    median = median(Value, na.rm = TRUE),
-    min = min(Value, na.rm = TRUE),
-    max = max(Value, na.rm = TRUE),
-    sd = sd(Value, na.rm = TRUE)
+    mean = mean(value.y, na.rm = TRUE),
+    median = median(value.y, na.rm = TRUE),
+    min = min(value.y, na.rm = TRUE),
+    max = max(value.y, na.rm = TRUE),
+    sd = sd(value.y, na.rm = TRUE)
   )
 datatable(estadisticos)
 ```
-## Visualization of Controls 
-To visualize the data, I plot ALL the controls, where each point represents a control, including replicates.
-::::: {.panel-tabset}
-# Split by Day
-:::: {.panel-tabset}
-## Day 2
-```{r fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-# Calcular el numero de observaciones por grupo y encontrar el maximo valor de Value para cada grupo
-filter_Day2 <- filter(control_data_long, Day == "D2")
 
-conteos <- filter_Day2 %>%
-  group_by(Strain, Cell, Cell_Type) %>%
-  summarize(N = sum(!is.na(Value)), max_value = max(Value, na.rm = TRUE), .groups = 'drop')
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+estat$experiment<-as.factor(estat$experiment)
+filter_Day2_control <- filter(estat, day == "2", cell=="BoMac")
+filter_Day6_control <- filter(estat, day == "6", cell=="BoMac")
 
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = Value)) +
-  geom_boxplot(aes(color = Strain), outlier.shape = NA) +  # Mover color a aes() para los boxplots
-  geom_jitter(aes(shape = Experiment),
+conteos <- filter_Day2_control %>%
+  group_by(experiment, condition) %>%
+  summarize(N = sum(!is.na(value.y)), max_value = max(value.y, na.rm = TRUE), .groups = 'drop')
+
+boxplotD2 <- ggplot(filter_Day2_control, aes(x = experiment, y = value.y)) +
+  geom_boxplot( outlier.shape = NA) + geom_jitter(aes(shape = experiment), 
               position = position_jitter(width = 0.2), 
               size = 2, 
-              alpha = 0.4) +
-  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
-  mycolorsTB::scale_color_mycolors() + 
-  theme_bw() +
-  labs(y = "", x = "", title = "Day 2") +
-  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1)) +
-  theme(axis.title = element_text(size = rel(1.5)),  
-        axis.text = element_text(size = rel(1.2)),  
-        plot.title = element_text(size = rel(1.8)),  
-        strip.text = element_text(size = rel(1.2))) +
+              alpha = 0.4) + facet_wrap(~ condition, nrow = 4, scales = "free_y")+
+  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,8)) +
   geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
             position = position_dodge(width = 0.75), 
             size = 3, vjust = 0)
-boxplotD2
 ```
-## Day 6
-```{r fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
-filter_Day2 <- filter(control_data_long, Day == "D6")
 
-conteos <- filter_Day2 %>%
-  group_by(Strain, Cell, Cell_Type) %>%
-  summarize(N = sum(!is.na(Value)), max_value = max(Value, na.rm = TRUE), .groups = 'drop')
-
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = Value)) +
-  geom_boxplot(aes(color = Strain), outlier.shape = NA) +  # Mover color a aes() para los boxplots
-  geom_jitter(aes(shape = Experiment), 
-              position = position_jitter(width = 0.2), 
-              size = 2, 
-              alpha = 0.4) +
-  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
-  mycolorsTB::scale_color_mycolors() +  # Escala de color para los puntos
-  theme_bw() +
-  labs(y = "", x = "", title = "Day 6") +
-  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1)) +
-  theme(axis.title = element_text(size = rel(1.5)),  
-        axis.text = element_text(size = rel(1.2)),  
-        plot.title = element_text(size = rel(1.8)),  
-        strip.text = element_text(size = rel(1.2))) +
-  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
-            position = position_dodge(width = 0.75), 
-            size = 3, vjust = 0)
-boxplotD2
-```
-::::
-# Split by Day and Experiment
-```{r funcexp,, message=FALSE, warning=FALSE, echo=FALSE }
-create_boxplot <- function(data, experiment_id, day, shape_value) {
-  # Define los valores requeridos para Strain, Cell y Cell_Type
-  required_strains <- c("A4", "A1", "L5", "L6")
-  required_cells <- c("BoMac", "THP1")
-  required_cell_types <- c("Late Apoptosis", "Early Apoptosis", "Necrotic", "Live")
-
-  # Filtra los datos basándose en el ID del experimento y el día
-  filtered_data <- filter(data, Day == day, Experiment == experiment_id)
-
-  # Asegura que todas las combinaciones de Strain, Cell y Cell_Type estén presentes
-  filtered_data <- filtered_data %>%
-    complete(Strain = required_strains, Cell = required_cells, Cell_Type = required_cell_types, 
-             nesting(Experiment), fill = list(Value = NA))
-
-  # Calcula conteos y valores máximos
-  conteos <- filtered_data %>%
-    group_by(Strain, Cell, Cell_Type) %>%
-    summarize(N = sum(!is.na(Value)), max_value = max(Value, na.rm = TRUE), .groups = 'drop')
-
-  # Crea el boxplot
-  boxplot <- ggplot(filtered_data, aes(x = Strain, y = Value)) +
-    geom_boxplot(aes(color = Strain), outlier.shape = NA) +
-    geom_jitter(aes(shape = Experiment),
-                position = position_jitter(width = 0.2),
-                size = 2,
-                alpha = 0.4) +
-    facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") +
-    scale_color_mycolors() +
-    theme_bw() +
-    labs(y = "", x = "", title = paste("Day", day)) +
-    scale_shape_manual(values = shape_value) +
-    theme(axis.title = element_text(size = rel(1.5)),
-          axis.text = element_text(size = rel(1.2)),
-          plot.title = element_text(size = rel(1.8)),
-          strip.text = element_text(size = rel(1.2))) +
-    geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
-              position = position_dodge(width = 0.75),
-              size = 3, vjust = 0)
-
-  return(boxplot)
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$value.y, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$value.y, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
 }
 ```
-:::: {.panel-tabset}
-## EXP0002
-::: {.panel-tabset}
-### Day 2
-```{r day2exp2,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "2", "D2", 22)
-```
-### Day 6 
-```{r day6exp2,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "2", "D6", 22)
-```
-:::
-## EXP0003
-::: {.panel-tabset}
-### Day 2
-```{r day2exp3,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "3", "D2", 22)
-```
-### Day 6 
-```{r day6exp3,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "3", "D6", 22)
-```
-:::
-## EXP0004
-::: {.panel-tabset}
-### Day 6 
-```{r day6exp4,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "4", "D6", 22)
-```
-:::
-## EXP0005
-::: {.panel-tabset}
-### Day 2
-```{r day2exp5,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "5", "D2", 22)
-```
-### Day 6 
-```{r day6exp5,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "5", "D6", 22)
-```
-:::
-## EXP0007
-::: {.panel-tabset}
-### Day 2
-```{r day2exp7,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "7", "D2", 22)
-```
-### Day 6 
-```{r day6exp7,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "7", "D6", 22)
-```
-:::
-## EXP0009
-::: {.panel-tabset}
-### Day 2
-```{r day2exp9,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "9", "D2", 22)
-```
-### Day 6 
-```{r day6exp9,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "9", "D6", 22)
-```
-:::
-## EXP0010
-::: {.panel-tabset}
-### Day 2
-```{r day2exp10,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "10", "D2", 22)
-```
-### Day 6 
-```{r day6exp10,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "10", "D6", 22)
-```
-:::
-## EXP0012
-::: {.panel-tabset}
-### Day 2
-```{r day2exp12,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "12", "D2", 22)
-```
-### Day 6 
-```{r day6exp12,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "12", "D6", 22)
-```
-:::
-## EXP0019
-::: {.panel-tabset}
-### Day 2
-```{r day2exp19,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "19", "D2", 22)
-```
-:::
-## EXP0020
-::: {.panel-tabset}
-### Day 2
-```{r day2exp20,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "20", "D2", 22)
-```
-### Day 6 
-```{r day6exp20,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "20", "D6", 22)
-```
-:::
-## EXP0024
-::: {.panel-tabset}
-### Day 2
-```{r day2exp24,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "24", "D2", 22)
-```
-:::
-## EXP0025
-::: {.panel-tabset}
-### Day 6 
-```{r day6exp25,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "25", "D6", 22)
-```
-:::
-## EXP0026
-::: {.panel-tabset}
-### Day 2
-```{r day2exp26,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "EXP0026", "D2", 22)
-```
-### Day 6 
-```{r day6exp26,fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "EXP0026", "D6", 22)
-```
-:::
-## EXP0027
-::: {.panel-tabset}
-### Day 2 
-```{r fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "EXP0027", "D2", 22)
-```
-### Day 6 
-```{r fig.height=6, fig.width=14, message=FALSE, warning=FALSE}
-create_boxplot(control_data_long, "EXP0027", "D6", 22)
-```
-:::
-::::
-:::::
-# DATA
-## Get LogFoldChange
-### Statistics
-```{r, message=FALSE, warning=FALSE}
-control_cols <- grep("^ControlAN[0-9]+$", names(raw_data), value = TRUE)
 
-raw_data$mean_control <- rowMeans(raw_data[control_cols], na.rm = TRUE)
+## Visualize distribution of control values
 
-raw_data$logfold <- raw_data$Cyto_Value / raw_data$mean_control
+Points colored in red are classified as outliers. To identify outliers, we use the interquartile range (IQR), which is defined as the difference between the third quartile (Q3) and the first quartile (Q1). Outliers are those values that fall outside of the following limits:
 
-estadisticos2 <- raw_data %>%
-  group_by(Experiment, Strain, Day, Cell, Cell_Type) %>%
+$$
+\text{Lower Bound (LB)} = Q1 - 1.5 \times IQR
+$$
+
+$$
+\text{Upper Bound (UB)} = Q3 + 1.5 \times IQR
+$$
+
+::: panel-tabset
+# THP-1
+
+::: panel-tabset
+## Day 2
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+estat$experiment <- as.factor(estat$experiment)
+filter_Day2_controlthp <- filter(estat, day == "2", cell == "THP1")
+
+bounds <- filter_Day2_controlthp %>%
+  group_by(experiment, condition) %>%
+  do(calculate_bounds(.))
+
+filter_Day2_controlthp <- left_join(filter_Day2_controlthp, bounds, by = c("experiment", "condition"))
+
+conteos <- filter_Day2_controlthp %>%
+  group_by(experiment, condition) %>%
+  summarize(N = sum(!is.na(value.y)), max_value = max(value.y, na.rm = TRUE), .groups = 'drop')
+
+boxplotD2 <- ggplot(filter_Day2_controlthp, aes(x = experiment, y = value.y)) +
+  geom_boxplot(outlier.shape = NA) +  # No mostrar outliers aquÃ­
+  geom_jitter(aes(color = ifelse(value.y < lower_bound | value.y > upper_bound, "black", "red"),
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Outliers en rojo
+  facet_wrap(~ condition, nrow = 2, scales = "free_y") +
+  scale_color_manual(values = c("red", "black")) +
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +theme_bw()  +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type")  +  
+  theme(
+    axis.title.x = element_blank(),  
+    axis.title.y = element_blank()  
+  )
+boxplotD2 + ggtitle("THP-1: Day 2")
+filter_Day2_controlthp_no_outliers <- filter_Day2_controlthp %>%
+  filter(value.y >= lower_bound & value.y <= upper_bound) 
+
+```
+
+## Day 6
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+estat$experiment <- as.factor(estat$experiment)
+filter_Day6_controlthp <- filter(estat, day == "6", cell == "THP1")
+
+bounds <- filter_Day6_controlthp %>%
+  group_by(experiment, condition) %>%
+  do(calculate_bounds(.))
+
+filter_Day6_controlthp <- left_join(filter_Day6_controlthp, bounds, by = c("experiment", "condition"))
+
+conteos <- filter_Day6_controlthp %>%
+  group_by(experiment, condition) %>%
+  summarize(N = sum(!is.na(value.y)), max_value = max(value.y, na.rm = TRUE), .groups = 'drop')
+
+boxplotD6 <- ggplot(filter_Day6_controlthp, aes(x = experiment, y = value.y)) +
+  geom_boxplot(outlier.shape = NA) +  # No mostrar outliers aquÃ­
+  geom_jitter(aes(color = ifelse(value.y < lower_bound | value.y > upper_bound, "black", "red"),
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Outliers en rojo
+  facet_wrap(~ condition, nrow = 2, scales = "free_y") +
+  scale_color_manual(values = c("red", "black")) +
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +theme_bw()  +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type")  +  
+  theme(
+    axis.title.x = element_blank(),  
+    axis.title.y = element_blank()  
+  )
+boxplotD6  + ggtitle("THP-1: Day 6")
+
+filter_Day6_controlthp_no_outliers <- filter_Day6_controlthp %>%
+  filter(value.y >= lower_bound & value.y <= upper_bound)
+```
+:::
+
+# Bomac
+
+::: panel-tabset
+## Day 2
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+estat$experiment <- as.factor(estat$experiment)
+filter_Day2_controlBoma <- filter(estat, day == "2", cell == "BoMac")
+
+bounds <- filter_Day2_controlBoma %>%
+  group_by(experiment, condition) %>%
+  do(calculate_bounds(.))
+
+filter_Day2_controlBoma <- left_join(filter_Day2_controlBoma, bounds, by = c("experiment", "condition"))
+
+conteos <- filter_Day2_controlBoma %>%
+  group_by(experiment, condition) %>%
+  summarize(N = sum(!is.na(value.y)), max_value = max(value.y, na.rm = TRUE), .groups = 'drop')
+
+boxplotD2_bomac <- ggplot(filter_Day2_controlBoma, aes(x = experiment, y = value.y)) +
+  geom_boxplot(outlier.shape = NA) +  # No mostrar outliers aquÃ­
+  geom_jitter(aes(color = ifelse(value.y < lower_bound | value.y > upper_bound, "black", "red"),
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Outliers en rojo
+  facet_wrap(~ condition, nrow = 2, scales = "free_y") +
+  scale_color_manual(values = c("red", "black")) +
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +theme_bw()  +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type")  +  
+  theme(
+    axis.title.x = element_blank(),  
+    axis.title.y = element_blank()  
+  )
+boxplotD2_bomac + ggtitle("BoMac: Day 2")
+filter_Day2_controlBoma_no_outliers <- filter_Day2_controlBoma %>%
+  filter(value.y >= lower_bound & value.y <= upper_bound)
+```
+
+## Day 6
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+estat$experiment <- as.factor(estat$experiment)
+filter_Day6_controlBoma <- filter(estat, day == "6", cell == "BoMac")
+
+bounds <- filter_Day6_controlBoma %>%
+  group_by(experiment, condition) %>%
+  do(calculate_bounds(.))
+
+filter_Day6_controlBoma <- left_join(filter_Day6_controlBoma, bounds, by = c("experiment", "condition"))
+
+conteos <- filter_Day6_controlBoma %>%
+  group_by(experiment, condition) %>%
+  summarize(N = sum(!is.na(value.y)), max_value = max(value.y, na.rm = TRUE), .groups = 'drop')
+
+boxplotD6_bomac <- ggplot(filter_Day6_controlBoma, aes(x = experiment, y = value.y)) +
+  geom_boxplot(outlier.shape = NA) +  # No mostrar outliers aquÃ­
+  geom_jitter(aes(color = ifelse(value.y < lower_bound | value.y > upper_bound, "black", "red"),
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Outliers en rojo
+  facet_wrap(~ condition, nrow = 2, scales = "free_y") +
+  scale_color_manual(values = c("red", "black")) +
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +theme_bw()  +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type")  +  
+  theme(
+    axis.title.x = element_blank(),  
+    axis.title.y = element_blank()  
+  )
+boxplotD6_bomac + ggtitle("BoMac: Day 6")
+filter_Day6_controlBoma_no_outliers <- filter_Day6_controlBoma %>%
+  filter(value.y >= lower_bound & value.y <= upper_bound)
+```
+:::
+:::
+
+## Remove outliers from each group
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+list_of_dfs <- list(filter_Day2_controlthp_no_outliers, filter_Day6_controlthp_no_outliers, filter_Day2_controlBoma_no_outliers, filter_Day6_controlBoma_no_outliers)
+
+controls_no_outliers <- bind_rows(list_of_dfs)
+
+controls_no_outliers$lower_bound  <- NULL
+controls_no_outliers$upper_bound <- NULL
+
+dim_estat <- dim(estat)
+dim_controls_no_outliers <- dim(controls_no_outliers)
+difference_in_rows <- dim_estat[1] - dim_controls_no_outliers[1]
+print(difference_in_rows)
+```
+
+### Stats with no outliers
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+controls_no_outliers <- controls_no_outliers %>% 
+  distinct()
+estadisticos2 <- controls_no_outliers %>% 
+  group_by(experiment, cell, condition, day) %>% 
   summarise(
     N = n(),
-    mean = mean(logfold, na.rm = TRUE),
-    median = median(logfold, na.rm = TRUE),
-    min = min(logfold, na.rm = TRUE),
-    max = max(logfold, na.rm = TRUE),
-    sd = sd(logfold, na.rm = TRUE)
+    mean = mean(value.y, na.rm = TRUE),
+    median = median(value.y, na.rm = TRUE),
+    min = min(value.y, na.rm = TRUE),
+    max = max(value.y, na.rm = TRUE),
+    sd = sd(value.y, na.rm = TRUE)
   )
 datatable(estadisticos2)
-
-raw_data$ControlAN1 <- NULL
-raw_data$ControlAN2 <- NULL
-raw_data$ControlAN3 <- NULL
-raw_data$ControlAN4 <- NULL
-raw_data$ControlAN5 <- NULL
-raw_data$ControlAN6 <- NULL
-raw_data$ControlAN7 <- NULL
-raw_data$ControlAN8 <- NULL
-raw_data$ControlAN1_ID <- NULL
-raw_data$ControlAN2_ID <- NULL
-raw_data$ControlAN3_ID <- NULL
-raw_data$ControlAN4_ID <- NULL
-raw_data$ControlAN5_ID <- NULL
-raw_data$ControlAN6_ID <- NULL
-raw_data$ControlAN7_ID <- NULL
-raw_data$ControlAN8_ID <- NULL
-raw_data$Cyto_Value <- NULL
-raw_data$Mean_Control <- NULL
-raw_data$mean_control <- NULL
 ```
 
-### Normality Test
-::::: {.panel-tabset}
-# Shapiro-Wilk Test
+# Second, Check Raw samples
+
+## Statistics
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+s_largo <- s_largo %>% 
+  distinct()
+estadisticos3 <- s_largo %>% 
+  group_by(experiment, cell, condition, day) %>% 
+  summarise(
+    N = n(),
+    mean = mean(value, na.rm = TRUE),
+    median = median(value, na.rm = TRUE),
+    min = min(value, na.rm = TRUE),
+    max = max(value, na.rm = TRUE),
+    sd = sd(value, na.rm = TRUE)
+  )
+datatable(estadisticos3)
+```
+
+## Visualize distributions
+
+To identify outliers, we use the interquartile range (IQR), which is defined as the difference between the third quartile (Q3) and the first quartile (Q1). Outliers are those values that fall outside of the following limits:
+
+$$
+\text{Lower Bound (LB)} = Q1 - 1.5 \times IQR
+$$
+
+$$
+\text{Upper Bound (UB)} = Q3 + 1.5 \times IQR
+$$
+
+::: panel-tabset
+### THP-1
+
+::: panel-tabset
+#### Day 2
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+s_largo$experiment <- as.factor(s_largo$experiment)
+Day2_thp1 <- filter(s_largo, day == "2", cell == "THP1")
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  do(calculate_bounds(.))
+
+conteos <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  summarize(N = sum(!is.na(value)), max_value = max(value, na.rm = TRUE), .groups = 'drop')
+
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+boxplot_Day2_thp1 <- ggplot(Day2_thp1, aes(x = strain, y = value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +  # Color por cepa para el boxplot
+  geom_jitter(aes(color = ifelse(value < lower_bound | value > upper_bound, "red", "black"), 
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Colores para outliers y normales
+  facet_wrap(~ condition, nrow = 2, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "black", "#995200", "#1eb040", "red")) +  # Especificar colores manualmente
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+# Mostrar el grÃ¡fico
+print(boxplot_Day2_thp1 + ggtitle("THP-1: Day 2"))
+```
+
+#### Day 6
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+s_largo$experiment <- as.factor(s_largo$experiment)
+Day2_thp1 <- filter(s_largo, day == "6", cell == "THP1")
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  do(calculate_bounds(.))
+
+conteos <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  summarize(N = sum(!is.na(value)), max_value = max(value, na.rm = TRUE), .groups = 'drop')
+
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+boxplot_Day2_thp1 <- ggplot(Day2_thp1, aes(x = strain, y = value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +  # Color por cepa para el boxplot
+  geom_jitter(aes(color = ifelse(value < lower_bound | value > upper_bound, "red", "black"), 
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Colores para outliers y normales
+  facet_wrap(~ condition, nrow = 2, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "black", "#995200", "#1eb040", "red")) +  # Especificar colores manualmente
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+# Mostrar el grÃ¡fico
+print(boxplot_Day2_thp1 + ggtitle("THP-1: Day 6"))
+```
+:::
+
+### BoMac
+
+::: panel-tabset
+#### Day 2
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+s_largo$experiment <- as.factor(s_largo$experiment)
+Day2_thp1 <- filter(s_largo, day == "2", cell == "BoMac")
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  do(calculate_bounds(.))
+
+conteos <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  summarize(N = sum(!is.na(value)), max_value = max(value, na.rm = TRUE), .groups = 'drop')
+
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+boxplot_Day2_thp1 <- ggplot(Day2_thp1, aes(x = strain, y = value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +  # Color por cepa para el boxplot
+  geom_jitter(aes(color = ifelse(value < lower_bound | value > upper_bound, "red", "black"), 
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Colores para outliers y normales
+  facet_wrap(~ condition, nrow = 2, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "black", "#995200", "#1eb040", "red")) +  # Especificar colores manualmente
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+# Mostrar el grÃ¡fico
+print(boxplot_Day2_thp1 + ggtitle("BoMac: Day 2"))
+```
+
+#### Day 6
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+s_largo$experiment <- as.factor(s_largo$experiment)
+Day2_thp1 <- filter(s_largo, day == "6", cell == "BoMac")
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  do(calculate_bounds(.))
+
+conteos <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  summarize(N = sum(!is.na(value)), max_value = max(value, na.rm = TRUE), .groups = 'drop')
+
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+boxplot_Day2_thp1 <- ggplot(Day2_thp1, aes(x = strain, y = value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +  # Color por cepa para el boxplot
+  geom_jitter(aes(color = ifelse(value < lower_bound | value > upper_bound, "red", "black"), 
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Colores para outliers y normales
+  facet_wrap(~ condition, nrow = 2, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "black", "#995200", "#1eb040", "red")) +  
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+# Mostrar el grÃ¡fico
+print(boxplot_Day2_thp1 + ggtitle("BoMac: Day 6"))
+```
+:::
+:::
+
+# Third, correct values with the mean of the controls
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+
+# Suponiendo que tu dataframe se llama controls_no_outliers
+resultado <- controls_no_outliers %>%
+  # Crear una nueva columna para la condiciÃ³n modificada
+  mutate(condition = case_when(
+    condition %in% c("late_apoptosis", "early_apoptosis") ~ "apoptosis",
+    TRUE ~ condition
+  )) %>%
+  # Agrupar por la nueva condiciÃ³n y las demÃ¡s columnas relevantes
+  group_by(filename, cell, day, experiment, condition, sampleid, type.y) %>%
+  # Sumarizar value.y
+  summarise(value.y = sum(value.y), .groups = 'drop')
+
+print(resultado)
+
+mean_values <- resultado %>%
+  group_by(filename, cell, day, experiment, condition) %>%
+  summarize(mean_value = mean(value.y, na.rm = TRUE), .groups = 'keep')
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+combined_data1 <- full_join(s_largo, mean_values, 
+                           by = c("filename", "condition", "day","cell","experiment"))
+
+s_largo2 <- s_largo %>%
+  # Crear una nueva columna para la condiciÃ³n modificada
+  mutate(condition = case_when(
+    condition %in% c("late_apoptosis", "early_apoptosis") ~ "apoptosis",
+    TRUE ~ condition
+  )) %>%
+  # Agrupar por la nueva condiciÃ³n y las demÃ¡s columnas relevantes
+  group_by(filename, cell, strain, day, experiment, condition, id, type) %>%
+  # Sumarizar value.y
+  summarise(value = sum(value), .groups = 'drop')
+
+combined_data1 <- full_join(s_largo2, mean_values, 
+                           by = c("filename", "condition", "day","cell","experiment"))
+```
 
 ```{r}
-shapiro_original <- shapiro.test(raw_data$logfold)
-print(shapiro_original)
-```
-# Histogram
-```{r}
-p1 <- ggplot(raw_data, aes(x = logfold)) +
-    geom_histogram(bins = 30, fill = "blue", color = "black") +
-    theme_minimal() +
-    labs(title = "Histogram logfold", x = "logfold", y = "Frequency")
-print(p1)
+# Filtrar para obtener solo las filas con 'necrosis' y 'apoptosis'
+filtered_data <- combined_data1 %>%
+  filter(condition %in% c("necrosis", "apoptosis"))
+
+
+# Crear la columna cyto_value
+filtered_data$cyto_value <- filtered_data$value / filtered_data$mean_value
+
+# Filtrar para mantener solo las filas donde cyto_value es mayor que 1
+filtered_data <- filtered_data[filtered_data$cyto_value > 1, ]
+
+# Filtrar adicionalmente para cyto_value <= 400
+filtered_data <- filtered_data %>%
+  filter(cyto_value <= 400)
+
+# Filtrar para obtener solo las filas con 'live'
+live_data <- combined_data1 %>%
+  filter(condition == "live")
+
+# Crear la columna cyto_value
+live_data$cyto_value <- live_data$value / live_data$mean_value
+
+# Filtrar para mantener solo las filas donde cyto_value es mayor que 1
+live_data <- live_data[live_data$cyto_value < 1, ]
+
+# Filtrar adicionalmente para cyto_value <= 400
+live_data <- live_data %>%
+  filter(cyto_value <= 400)
+
+combined_data1 <- bind_rows(filtered_data, live_data)
 ```
 
-# Q-Q Plot
-```{r}
-qqnorm(raw_data$logfold)
-qqline(raw_data$logfold, col = "red")
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+#combined_data1$cyto_value <- combined_data1$value / combined_data1$mean_value
+#combined_data1 <- combined_data1[combined_data1$cyto_value > 1, ]
+#combined_data1 <- combined_data1 %>%
+#  filter(cyto_value <= 400)
 ```
-:::::
-### Visualization of LogFoldChange
-::::: {.panel-tabset}
-# Split by Day
-:::: {.panel-tabset}
+
+::: panel-tabset
+### THP-1
+
+::: panel-tabset
+#### Day 2
+
+::: panel-tabset
+##### With Outliers
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+combined_data1$experiment <- as.factor(combined_data1$experiment)
+Day2_thp1 <- filter(combined_data1, day == "2", cell == "THP1")
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$cyto_value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$cyto_value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  do(calculate_bounds(.))
+
+conteos <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  summarize(N = sum(!is.na(cyto_value)), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+boxplot_Day2_thp1 <- ggplot(Day2_thp1, aes(x = strain, y = cyto_value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +  # Color por cepa para el boxplot
+  geom_jitter(aes(color = ifelse(cyto_value < lower_bound | cyto_value > upper_bound, "red", "black"), 
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Colores para outliers y normales
+  facet_wrap(~ condition, nrow = 1, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "black", "#995200", "#1eb040", "red")) +  # Especificar colores manualmente
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+print(boxplot_Day2_thp1 + ggtitle("THP-1: Day 2") + geom_hline(yintercept=1, linetype="dashed", color = "red"))
+```
+
+##### Without Outliers
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+# Assuming combined_data1 is already loaded and transformed
+combined_data1$experiment <- as.factor(combined_data1$experiment)
+Day2_thp1 <- filter(combined_data1, day == "2", cell == "THP1")
+
+# Function to calculate bounds
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$cyto_value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$cyto_value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+
+# Calculate bounds
+bounds <- Day2_thp1 %>%
+  group_by(cell, strain, condition) %>%
+  do(calculate_bounds(.))
+
+# Join bounds back to the data
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+
+# Filter out the outliers
+Day2_thp1 <- Day2_thp1 %>%
+  filter(cyto_value >= lower_bound & cyto_value <= upper_bound)
+c2t<-Day2_thp1
+# Plotting
+boxplot_Day2_thp1 <- ggplot(Day2_thp1, aes(x = strain, y = cyto_value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +
+  geom_jitter(aes(color = strain, shape = experiment), position = position_jitter(width = 0.2), size = 2, alpha = 0.4) +
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  facet_wrap(~ condition, nrow = 1, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Strain")
+
+# Display the plot
+print(boxplot_Day2_thp1 + geom_hline(yintercept=1, linetype="dashed", color = "red") + ggtitle("THP-1: Day 2"))
+```
+:::
+
+#### Day 6
+
+::: panel-tabset
+##### With Outliers
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+combined_data1$experiment <- as.factor(combined_data1$experiment)
+Day2_thp1 <- filter(combined_data1, day == "6", cell == "THP1")
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$cyto_value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$cyto_value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  do(calculate_bounds(.))
+
+conteos <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  summarize(N = sum(!is.na(cyto_value)), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+boxplot_Day2_thp1 <- ggplot(Day2_thp1, aes(x = strain, y = cyto_value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +  # Color por cepa para el boxplot
+  geom_jitter(aes(color = ifelse(cyto_value < lower_bound | cyto_value > upper_bound, "red", "black"), 
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Colores para outliers y normales
+  facet_wrap(~ condition, nrow = 1, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "black", "#995200", "#1eb040", "red")) +  # Especificar colores manualmente
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+print(boxplot_Day2_thp1 + geom_hline(yintercept=1, linetype="dashed", color = "red") + ggtitle("THP-1: Day 6"))
+```
+
+##### Without Outliers
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+# Assuming combined_data1 is already loaded and transformed
+combined_data1$experiment <- as.factor(combined_data1$experiment)
+Day2_thp1 <- filter(combined_data1, day == "6", cell == "THP1")
+
+# Function to calculate bounds
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$cyto_value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$cyto_value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+
+# Calculate bounds
+bounds <- Day2_thp1 %>%
+  group_by(cell, strain, condition) %>%
+  do(calculate_bounds(.))
+
+# Join bounds back to the data
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+
+# Filter out the outliers
+Day6_thp1 <- Day2_thp1 %>%
+  filter(cyto_value >= lower_bound & cyto_value <= upper_bound)
+c6t<-Day6_thp1
+# Plotting
+boxplot_Day2_thp1 <- ggplot(Day6_thp1, aes(x = strain, y = cyto_value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +
+  geom_jitter(aes(color = strain, shape = experiment), position = position_jitter(width = 0.2), size = 2, alpha = 0.4) +
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  facet_wrap(~ condition, nrow = 1, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Strain")
+
+# Display the plot
+print(boxplot_Day2_thp1+ geom_hline(yintercept=1, linetype="dashed", color = "red") + ggtitle("THP-1: Day 6"))
+```
+:::
+:::
+
+### BoMac
+
+::: panel-tabset
+#### Day 2
+
+::: panel-tabset
+##### With outliers
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+combined_data1$experiment <- as.factor(combined_data1$experiment)
+Day2_thp1 <- filter(combined_data1, day == "2", cell == "BoMac")
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$cyto_value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$cyto_value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  do(calculate_bounds(.))
+
+conteos <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  summarize(N = sum(!is.na(cyto_value)), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+boxplot_Day2_thp1 <- ggplot(Day2_thp1, aes(x = strain, y = cyto_value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +  # Color por cepa para el boxplot
+  geom_jitter(aes(color = ifelse(cyto_value < lower_bound | cyto_value > upper_bound, "red", "black"), 
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Colores para outliers y normales
+  facet_wrap(~ condition, nrow = 1, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "black", "#995200", "#1eb040", "red")) +  # Especificar colores manualmente
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+# Mostrar el grÃ¡fico
+print(boxplot_Day2_thp1 + geom_hline(yintercept=1, linetype="dashed", color = "red") + ggtitle("BoMac: Day 2"))
+```
+
+##### Without outliers
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+
+# Assuming combined_data1 is already loaded and transformed
+combined_data1$experiment <- as.factor(combined_data1$experiment)
+Day2_thp1 <- filter(combined_data1, day == "2", cell == "BoMac")
+
+# Function to calculate bounds
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$cyto_value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$cyto_value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+
+# Calculate bounds
+bounds <- Day2_thp1 %>%
+  group_by(cell, strain, condition) %>%
+  do(calculate_bounds(.))
+
+# Join bounds back to the data
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+
+# Filter out the outliers
+Day2_bomac <- Day2_thp1 %>%
+  filter(cyto_value >= lower_bound & cyto_value <= upper_bound)
+c2b<-Day2_bomac
+# Plotting
+boxplot_Day2_thp1 <- ggplot(Day2_bomac, aes(x = strain, y = cyto_value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +
+  geom_jitter(aes(color = strain, shape = experiment), position = position_jitter(width = 0.2), size = 2, alpha = 0.4) +
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  facet_wrap(~ condition, nrow = 1, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Strain")
+
+# Display the plot
+print(boxplot_Day2_thp1+ geom_hline(yintercept=1, linetype="dashed", color = "red") + ggtitle("BoMac: Day 2"))
+```
+:::
+
+#### Day 6
+
+::: panel-tabset
+##### With outliers
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+combined_data1$experiment <- as.factor(combined_data1$experiment)
+Day2_thp1 <- filter(combined_data1, day == "6", cell == "BoMac")
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$cyto_value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$cyto_value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+bounds <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  do(calculate_bounds(.))
+
+conteos <- Day2_thp1 %>%
+  group_by(cell,strain, condition) %>%
+  summarize(N = sum(!is.na(cyto_value)), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+boxplot_Day2_thp1 <- ggplot(Day2_thp1, aes(x = strain, y = cyto_value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +  # Color por cepa para el boxplot
+  geom_jitter(aes(color = ifelse(cyto_value < lower_bound | cyto_value > upper_bound, "red", "black"), 
+                  shape = experiment), position = position_jitter(width = 0.2), 
+              size = 2, alpha = 0.4) +  # Colores para outliers y normales
+  facet_wrap(~ condition, nrow = 1, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "black", "#995200", "#1eb040", "red")) +  
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Point Type") +  
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+print(boxplot_Day2_thp1 + geom_hline(yintercept=1, linetype="dashed", color = "red") + ggtitle("BoMac: Day 6"))
+```
+
+##### Without outliers
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+# Assuming combined_data1 is already loaded and transformed
+combined_data1$experiment <- as.factor(combined_data1$experiment)
+Day2_thp1 <- filter(combined_data1, day == "6", cell == "BoMac")
+
+
+medias <- Day2_thp1 %>%
+  group_by(cell, strain, day, condition) %>%
+  summarize(
+    N = sum(!is.na(cyto_value)),
+    max_value = max(cyto_value, na.rm = TRUE), 
+    mean_value = mean(cyto_value, na.rm = TRUE),  
+    sd_value = sd(cyto_value, na.rm = TRUE),  
+    sem_value = sd(cyto_value, na.rm = TRUE) / sqrt(N), 
+    .groups = 'drop' 
+  )
+
+# Function to calculate bounds
+calculate_bounds <- function(data) {
+  Q1 <- quantile(data$cyto_value, 0.25, na.rm = TRUE)
+  Q3 <- quantile(data$cyto_value, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  return(data.frame(lower_bound, upper_bound))
+}
+
+# Calculate bounds
+bounds <- Day2_thp1 %>%
+  group_by(cell, strain, condition) %>%
+  do(calculate_bounds(.))
+
+# Join bounds back to the data
+Day2_thp1 <- left_join(Day2_thp1, bounds, by = c("cell", "strain", "condition"))
+
+# Filter out the outliers
+Day6_bomac <- Day2_thp1 %>%
+  filter(cyto_value >= lower_bound & cyto_value <= upper_bound)
+c6b<-Day6_bomac
+# Plotting
+boxplot_Day2_thp1 <- ggplot(Day6_bomac, aes(x = strain, y = cyto_value)) +
+  geom_boxplot(aes(color = strain), outlier.shape = NA) +
+  geom_jitter(aes(color = strain, shape = experiment), position = position_jitter(width = 0.2), size = 2, alpha = 0.4) +
+  scale_shape_manual(values = c(21, 24, 25, 22, 18, 13, 12, 11, 10, 9, 23, 8)) +
+  facet_wrap(~ condition, nrow = 1, scales = "free_y") +
+  scale_color_manual(values = c("#d1ae00", "#ff9cdb", "#995200", "#1eb040")) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(color = "Strain")
+
+# Display the plot
+print(boxplot_Day2_thp1 + geom_hline(yintercept=1, linetype="dashed", color = "red") + ggtitle("BoMac: Day 6"))
+```
+:::
+:::
+:::
+
+# Compare Lineages
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+list_of_dfs <- list(c2t, c2b, c6b, c6t)
+controls_no_outliers <- bind_rows(list_of_dfs)
+controls_no_outliers$lower_bound  <- NULL
+controls_no_outliers$upper_bound <- NULL
+
+controls_no_outliers <- controls_no_outliers %>%
+  mutate(combined = paste(cell, strain, sep="-"))
+
+controls_no_outliers <- controls_no_outliers %>%
+  mutate(combined = case_when(
+    combined %in% c("THP1-A1", "THP1-L6","BoMac-A1","BoMac-L6") ~ "Intermedium",
+    combined %in% c("THP1-L5","BoMac-A4") ~ "High",
+    combined %in% c("BoMac-L5","THP1-A4") ~ "Low",
+    TRUE ~ combined  # Esto mantiene los valores originales para todos los otros casos
+  ))
+```
+
 ## Day 2
-```{r fig.height=6, fig.width=14, warning=FALSE}
+
+```{r fig.height=9, fig.width=14, echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
 my_comparisons <- list( c("A4", "L5"),c("L5","L6"),c("A1","A4"),c("L6","A4"),c("L5","A1"),c("L6","A1"))
-# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
-filter_Day2 <- filter(raw_data, Day == "D2")
+
+filter_Day2 <- filter(controls_no_outliers, day == "2")
+dunn_results <- filter_Day2 %>%
+  group_by(cell, condition) %>%
+  dunn_test(cyto_value ~ strain) %>%
+  group_by(cell, condition) %>%  # Mantener el agrupamiento para aplicar la corrección
+  adjust_pvalue(method = "fdr") %>%
+  add_significance() %>%
+  ungroup()  
+
+medias <- filter_Day2 %>%
+  group_by(cell, strain) %>%
+  summarize(
+    N = sum(!is.na(cyto_value)),
+    max_value = max(cyto_value, na.rm = TRUE), 
+    mean_value = mean(cyto_value, na.rm = TRUE),  
+    sd_value = sd(cyto_value, na.rm = TRUE),  
+    sem_value = sd(cyto_value, na.rm = TRUE) / sqrt(N), 
+    .groups = 'drop' 
+  )
 
 conteos <- filter_Day2 %>%
-  group_by(Strain, Cell, Cell_Type) %>%
-  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+  group_by(strain, cell, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
 
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
+# Crear el grÃ¡fico boxplot
+boxplotD2 <- ggplot(filter_Day2, aes(x = strain, y = cyto_value, color = strain)) +
   geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(shape = Experiment, fill = Strain), 
+  geom_jitter(aes(shape = cell, fill = strain), 
               position = position_jitter(width = 0.2), 
               size = 2, 
               alpha = 0.4) +
-  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
+  facet_wrap(~ cell + condition, nrow = 2, scales = "free_y") + 
   mycolorsTB::scale_color_mycolors() +
   mycolorsTB::scale_fill_mycolors() +
   theme_bw() +
-  labs(y = "LogFoldChante", x = "Strain", title = "Day 2") +
-  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
-  theme(axis.title = element_text(size = rel(1.5)),
-        axis.text = element_text(size = rel(1.2)),
-        plot.title = element_text(size = rel(1.8)),
+  labs(y = "LogFoldChange", x = "Strain", title = "Day 2") +
+  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,8,8)) +
+  theme(axis.title = element_text(size = rel(1.5)),  
+        axis.text = element_text(size = rel(1.2)),  
+        plot.title = element_text(size = rel(1.8)),  
         strip.text = element_text(size = rel(1.2))) +
-  geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
-            position = position_dodge(width = 0.75),
-            size = 3, vjust = 0) + stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
-boxplotD2
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  stat_kwAllPairsDunnTest()
+boxplotD2 + geom_hline(yintercept=1, linetype="dashed", color = "red")+theme_pubr()
 ```
+
+
+```{r fig.height=9, fig.width=14, echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+my_comparisons <- list( c("A4", "L5"),c("L5","L6"),c("A1","A4"),c("L6","A4"),c("L5","A1"),c("L6","A1"))
+fill_colors <- c("High" = "#e76f51", "Intermedium" = "#e9c46a", "Low" = "#2a9d8f","L6" = "#1eb040", "L5" = "#995200", "A1" = "#d1ae00", "A4" = "#ff9cdb" , "2"="grey", "6"="#26beff")  # Reemplaza A, B, C con tus grupos
+
+filter_Day2 <- filter(controls_no_outliers, day == "2")
+dunn_results <- filter_Day2 %>%
+  group_by(cell, condition) %>%
+  dunn_test(cyto_value ~ strain) %>%
+  group_by(cell, condition) %>%  # Mantener el agrupamiento para aplicar la corrección
+  adjust_pvalue(method = "fdr") %>%
+  add_significance() %>%
+  ungroup()  
+
+media_sem <- filter_Day2 %>%
+  group_by(combined, condition) %>%
+  summarize(mean_value = mean(cyto_value, na.rm = TRUE),
+            sd_value = sd(cyto_value, na.rm = TRUE),
+            sem_value = sd_value / sqrt(length(cyto_value)))
+
+print(media_sem)
+
+conteos <- filter_Day2 %>%
+  group_by(combined, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+
+boxplotD2 <- ggplot(filter_Day2, aes(x = combined, y = cyto_value, color = combined)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(shape = cell, fill = strain), 
+              position = position_jitter(width = 0.2), 
+              size = 2, 
+              alpha = 0.4) +
+  facet_wrap(~  condition, nrow = 1, scales = "free_y") + 
+  scale_color_manual(values = fill_colors) +
+  mycolorsTB::scale_fill_mycolors() +
+  theme_bw() +
+  labs(y = "LogFoldChange", x = "Strain", title = "Day 2") +
+  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,8,8)) +
+  theme(axis.title = element_text(size = rel(1.5)),  
+        axis.text = element_text(size = rel(1.2)),  
+        plot.title = element_text(size = rel(1.8)),  
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
+            position = position_dodge(width = 0.75), 
+            size = 3, vjust = 0) +
+  stat_kwAllPairsDunnTest()
+boxplotD2 + geom_hline(yintercept=1, linetype="dashed", color = "red")+theme_pubr()
+```
+
 ## Day 6
-```{r fig.height=6, fig.width=14, warning=FALSE}
-filter_Day2 <- filter(raw_data, Day == "D6")
 
+```{r fig.height=9, fig.width=14, warning=FALSE}
+my_comparisons <- list( c("A4", "L5"),c("L5","L6"),c("A1","A4"),c("L6","A4"),c("L5","A1"),c("L6","A1"))
+
+filter_Day2 <- filter(controls_no_outliers, day == "6")
+
+dunn_results <- filter_Day2 %>%
+  group_by(cell, condition) %>%
+  dunn_test(cyto_value ~ strain) %>%
+  group_by(cell, condition) %>%  # Mantener el agrupamiento para aplicar la corrección
+  adjust_pvalue(method = "fdr") %>%
+  add_significance() %>%
+  ungroup()  
+medias <- filter_Day2 %>%
+  group_by(cell, strain, condition) %>%
+  summarize(
+    N = sum(!is.na(cyto_value)),
+    max_value = max(cyto_value, na.rm = TRUE), 
+    mean_value = mean(cyto_value, na.rm = TRUE),  
+    sd_value = sd(cyto_value, na.rm = TRUE),  
+    sem_value = sd(cyto_value, na.rm = TRUE) / sqrt(N), 
+    .groups = 'drop' 
+  )
 conteos <- filter_Day2 %>%
-  group_by(Strain, Cell, Cell_Type) %>%
-  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+  group_by(strain, cell, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
 
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
+# Crear el grÃ¡fico boxplot
+boxplotD2 <- ggplot(filter_Day2, aes(x = strain, y = cyto_value, color = strain)) +
   geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(shape = Experiment, fill = Strain), 
+  geom_jitter(aes(shape = cell, fill = strain), 
               position = position_jitter(width = 0.2), 
               size = 2, 
               alpha = 0.4) +
-  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
+  facet_wrap(~ cell + condition, nrow = 2, scales = "free_y") + 
   mycolorsTB::scale_color_mycolors() +
   mycolorsTB::scale_fill_mycolors() +
   theme_bw() +
-  labs(y = "LogFoldChante", x = "Strain", title = "Day 6") +
-  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
+  labs(y = "LogFoldChange", x = "Strain", title = "Day 6") +
+  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,8,8)) +
   theme(axis.title = element_text(size = rel(1.5)),  
         axis.text = element_text(size = rel(1.2)),  
         plot.title = element_text(size = rel(1.8)),  
         strip.text = element_text(size = rel(1.2))) +
   geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
             position = position_dodge(width = 0.75), 
-            size = 3, vjust = 0)+ stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
-
-boxplotD2
+            size = 3, vjust = 0) +
+  stat_kwAllPairsDunnTest()
+boxplotD2  + geom_hline(yintercept=1, linetype="dashed", color = "red") + theme_pubr()
 ```
-::::
-# Split by Experiment
-:::: {.panel-tabset}
-## EXP0026
-::: {.panel-tabset}
-### Day 2
-```{r fig.height=6, fig.width=14, warning=FALSE}
-# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
-filter_Day2 <- filter(raw_data, Day == "D2", Experiment == "EXP0026")
 
+```{r fig.height=9, fig.width=14, echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+my_comparisons <- list( c("A4", "L5"),c("L5","L6"),c("A1","A4"),c("L6","A4"),c("L5","A1"),c("L6","A1"))
+fill_colors <- c("High" = "#e76f51", "Intermedium" = "#e9c46a", "Low" = "#2a9d8f","L6" = "#1eb040", "L5" = "#995200", "A1" = "#d1ae00", "A4" = "#ff9cdb" , "2"="grey", "6"="#26beff")  # Reemplaza A, B, C con tus grupos
+
+filter_Day2 <- filter(controls_no_outliers, day == "6")
+dunn_results <- filter_Day2 %>%
+  group_by(condition) %>%
+  dunn_test(cyto_value ~ combined) %>%
+  group_by(condition) %>%  # Mantener el agrupamiento para aplicar la corrección
+  adjust_pvalue(method = "fdr") %>%
+  add_significance() %>%
+  ungroup()  
+media_sem <- filter_Day2 %>%
+  group_by(combined, condition) %>%
+  summarize(mean_value = mean(cyto_value, na.rm = TRUE),
+            sd_value = sd(cyto_value, na.rm = TRUE),
+            sem_value = sd_value / sqrt(length(cyto_value)))
 conteos <- filter_Day2 %>%
-  group_by(Strain, Cell, Cell_Type) %>%
-  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
+  group_by(combined, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
 
-# Crear el gráfico boxplot
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
+boxplotD2 <- ggplot(filter_Day2, aes(x = combined, y = cyto_value, color = combined)) +
   geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(shape = Experiment, fill = Strain), 
+  geom_jitter(aes(shape = cell, fill = strain), 
               position = position_jitter(width = 0.2), 
               size = 2, 
               alpha = 0.4) +
-  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
-  mycolorsTB::scale_color_mycolors() +
+  facet_wrap(~  condition, nrow = 1, scales = "free_y") + 
+  scale_color_manual(values = fill_colors) +
   mycolorsTB::scale_fill_mycolors() +
   theme_bw() +
-  labs(y = "LogFoldChante", x = "Strain", title = "Day 2") +
-  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
+  labs(y = "LogFoldChange", x = "Strain", title = "Day 6") +
+  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,8,8)) +
   theme(axis.title = element_text(size = rel(1.5)),  
         axis.text = element_text(size = rel(1.2)),  
         plot.title = element_text(size = rel(1.8)),  
         strip.text = element_text(size = rel(1.2))) +
   geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
             position = position_dodge(width = 0.75), 
-            size = 3, vjust = 0)+ stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
-
-boxplotD2
+            size = 3, vjust = 0) +
+  stat_kwAllPairsDunnTest()
+boxplotD2 + geom_hline(yintercept=1, linetype="dashed", color = "red")+theme_pubr()
 ```
-### Day 6
-```{r fig.height=6, fig.width=14, warning=FALSE}
-# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
-filter_Day2 <- filter(raw_data, Day == "D6", Experiment == "EXP0026")
 
-conteos <- filter_Day2 %>%
-  group_by(Strain, Cell, Cell_Type) %>%
-  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
 
-# Crear el gráfico boxplot
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(shape = Experiment, fill = Strain), 
-              position = position_jitter(width = 0.2), 
-              size = 2, 
-              alpha = 0.4) +
-  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() +
-  theme_bw() +
-  labs(y = "LogFoldChante", x = "Strain", title = "Day 2") +
-  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
-  theme(axis.title = element_text(size = rel(1.5)),  
-        axis.text = element_text(size = rel(1.2)),  
-        plot.title = element_text(size = rel(1.8)),  
-        strip.text = element_text(size = rel(1.2))) +
-  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
-            position = position_dodge(width = 0.75), 
-            size = 3, vjust = 0)+ stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
+# Compare Groups
 
-boxplotD2
-```
-:::
-## EXP0027
-::: {.panel-tabset}
-### Day 2
-```{r fig.height=6, fig.width=14, warning=FALSE}
-# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
-filter_Day2 <- filter(raw_data, Day == "D2", Experiment == "EXP0027")
-
-conteos <- filter_Day2 %>%
-  group_by(Strain, Cell, Cell_Type) %>%
-  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
-
-# Crear el gráfico boxplot
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(shape = Experiment, fill = Strain), 
-              position = position_jitter(width = 0.2), 
-              size = 2, 
-              alpha = 0.4) +
-  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() +
-  theme_bw() +
-  labs(y = "LogFoldChante", x = "Strain", title = "Day 2") +
-  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
-  theme(axis.title = element_text(size = rel(1.5)),  
-        axis.text = element_text(size = rel(1.2)),  
-        plot.title = element_text(size = rel(1.8)),  
-        strip.text = element_text(size = rel(1.2))) +
-  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
-            position = position_dodge(width = 0.75), 
-            size = 3, vjust = 0)+ stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
-
-boxplotD2
-```
-### Day 6
-```{r fig.height=6, fig.width=14, warning=FALSE}
-# Calcular el número de observaciones por grupo y encontrar el máximo valor de Value para cada grupo
-filter_Day2 <- filter(raw_data, Day == "D6", Experiment == "EXP0027")
-
-conteos <- filter_Day2 %>%
-  group_by(Strain, Cell, Cell_Type) %>%
-  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
-
-# Crear el gráfico boxplot
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, color = Strain)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(shape = Experiment, fill = Strain), 
-              position = position_jitter(width = 0.2), 
-              size = 2, 
-              alpha = 0.4) +
-  facet_wrap(~ Cell + Cell_Type, nrow = 2, scales = "free_y") + 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() +
-  theme_bw() +
-  labs(y = "LogFoldChante", x = "Strain", title = "Day 2") +
-  scale_shape_manual(values = c(21, 24,25,22,21,13,12,11,10,9,23,1)) +
-  theme(axis.title = element_text(size = rel(1.5)),  
-        axis.text = element_text(size = rel(1.2)),  
-        plot.title = element_text(size = rel(1.8)),  
-        strip.text = element_text(size = rel(1.2))) +
-  geom_text(data = conteos, aes(label = N, y = max_value * 1.05), 
-            position = position_dodge(width = 0.75), 
-            size = 3, vjust = 0)+ stat_compare_means(aes(group = Strain,label = after_stat(p.signif)),comparisons = my_comparisons, method="wilcox.test")
-
-boxplotD2
-```
-:::
-::::
-# Compare Cell Hosts
-:::: {.panel-tabset}
+::: panel-tabset
 ## Split by Day
-::: {.panel-tabset}
+
+::: panel-tabset
 ### Day 2
-```{r fig.height=6, fig.width=8, warning=FALSE}
-filter_Day2 <- filter(raw_data, Day == "D2")
+
+::: panel-tabset
+#### Concat
+
+```{r fig.height=6, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+filter_Day2 <- filter(controls_no_outliers, day == "2")
+
+medias <- filter_Day2 %>%
+  group_by(strain, day, condition) %>%
+  summarize(
+    N = sum(!is.na(cyto_value)),
+    max_value = max(cyto_value, na.rm = TRUE), 
+    mean_value = mean(cyto_value, na.rm = TRUE),  
+    sd_value = sd(cyto_value, na.rm = TRUE),  
+    sem_value = sd(cyto_value, na.rm = TRUE) / sqrt(N), 
+    .groups = 'drop' 
+  )
+
 conteos <- filter_Day2 %>%
-  group_by(Strain, Cell, Cell_Type) %>%
-  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
-# Crear el gráfico boxplot con patrones
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, pattern = Cell, fill=Strain, color=Cell)) +
-  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = Cell), size=2, alpha=.5,position = position_jitterdodge()) + 
-facet_wrap(~ Cell_Type, nrow = 2, scales = "free_y") +
+  group_by(strain, cell, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+# Crear el grÃ¡fico boxplot con patrones
+boxplotD2 <- ggplot(filter_Day2, aes(x = strain, y = cyto_value, pattern = cell, fill=strain, color=cell)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = cell), size=2, alpha=.5,position = position_jitterdodge()) + 
+#facet_wrap(strain~condition, nrow = 2, scales = "free_y") +
+  facet_wrap(~condition, nrow = 1, scales = "free_y") +
 theme_bw() +
 labs(y = "Log-fold Change", x = "Strain", title = "Day 2") +
 theme(axis.title = element_text(size = rel(1.5)),
@@ -638,18 +1323,76 @@ strip.text = element_text(size = rel(1.2))) +
 geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
 position = position_dodge(width = 0.75),
 size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))
-boxplotD2+ stat_compare_means(aes(group = Cell), method="wilcox.test", label = "p.signif")
+boxplotD2+ stat_compare_means(aes(group = cell), method="wilcox.test", label = "p.signif") + geom_hline(yintercept=1, linetype="dashed", color = "red")+theme_pubr()
 ```
+
+
+
+#### Split
+
+```{r fig.height=12, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+filter_Day2 <- filter(controls_no_outliers, day == "2")
+my_comparisons <- list(c("THP1", "BoMac"))
+# Sumarizar los datos
+conteos <- filter_Day2 %>%
+  group_by(strain, cell, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+
+# Filtrar para asegurar que sÃ³lo las combinaciones con datos se usen
+filter_Day2 <- filter_Day2 %>%
+  filter(paste(strain, condition) %in% paste(conteos$strain, conteos$condition))
+
+# Crear el grÃ¡fico boxplot
+boxplotD2 <- ggplot(filter_Day2, aes(x = cell, y = cyto_value, pattern = cell, fill=strain, color=cell)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) +
+  geom_point(aes(shape = cell), size=2, alpha=.5, position = position_jitterdodge()) +
+  facet_wrap(~strain + condition, nrow = 4, scales = "free_y") +
+  theme_bw() +
+  labs(y = "Log-fold Change", x = "Strain", title = "Day 2") +
+  theme(axis.title = element_text(size = rel(1.5)),
+        axis.text = element_text(size = rel(1.2)),
+        plot.title = element_text(size = rel(1.8)),
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+            position = position_dodge(width = 0.75),
+            size = 3.5, vjust = 0) +
+  mycolorsTB::scale_fill_mycolors() +
+  scale_color_manual(values=c("#000000", "#b3b1b1"))
+
+boxplotD2  + geom_hline(yintercept=1, linetype="dashed", color = "red") + stat_compare_means(aes(group = cell), method="wilcox.test", label = "p.signif")
+```
+:::
+
 ### Day 6
-```{r fig.height=6, fig.width=8, warning=FALSE}
-filter_Day6 <- filter(raw_data, Day == "D6")
-conteos <- filter_Day6 %>%
-  group_by(Strain, Cell, Cell_Type) %>%
-  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
-# Crear el gráfico boxplot con patrones
-boxplotD6 <- ggplot(filter_Day6, aes(x = Strain, y = logfold, pattern = Cell, fill=Strain, color=Cell)) +
-  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = Cell), size=2, alpha=.5,position = position_jitterdodge()) + 
-facet_wrap(~ Cell_Type, nrow = 2, scales = "free_y") +
+
+::: panel-tabset
+#### Concat
+
+```{r fig.height=6, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+
+
+filter_Day2 <- filter(controls_no_outliers, day == "6")
+conteos <- filter_Day2 %>%
+  group_by(strain, cell, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+# Crear el grÃ¡fico boxplot con patrones
+filter_Day2$condition <- factor(filter_Day2$condition, levels = c("live", "apoptosis", "necrosis"))
+
+medias <- filter_Day2 %>%
+  group_by(strain, day, condition) %>%
+  summarize(
+    N = sum(!is.na(cyto_value)),
+    max_value = max(cyto_value, na.rm = TRUE), 
+    mean_value = mean(cyto_value, na.rm = TRUE),  
+    sd_value = sd(cyto_value, na.rm = TRUE),  
+    sem_value = sd(cyto_value, na.rm = TRUE) / sqrt(N), 
+    .groups = 'drop' 
+  )
+
+boxplotD2 <- ggplot(filter_Day2, aes(x = strain, y = cyto_value, pattern = cell, fill=strain, color=cell)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = cell), size=2, alpha=.5,position = position_jitterdodge()) + 
+#facet_wrap(strain~condition, nrow = 2, scales = "free_y") +
+  facet_wrap(~condition, nrow = 1, scales = "free_y") +
 theme_bw() +
 labs(y = "Log-fold Change", x = "Strain", title = "Day 6") +
 theme(axis.title = element_text(size = rel(1.5)),
@@ -659,259 +1402,342 @@ strip.text = element_text(size = rel(1.2))) +
 geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
 position = position_dodge(width = 0.75),
 size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))
-boxplotD6+ stat_compare_means(aes(group = Cell), method="wilcox.test", label = "p.signif")
+boxplotD2+ stat_compare_means(aes(group = cell), method="wilcox.test", label = "p.signif") + geom_hline(yintercept=1, linetype="dashed", color = "red") + theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+```
+
+#### Split
+
+```{r fig.height=12, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+filter_Day2 <- filter(controls_no_outliers, day == "6")
+my_comparisons <- list(c("THP1", "BoMac"))
+# Sumarizar los datos
+conteos <- filter_Day2 %>%
+  group_by(strain, cell, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+
+# Filtrar para asegurar que sÃ³lo las combinaciones con datos se usen
+filter_Day2 <- filter_Day2 %>%
+  filter(paste(strain, condition) %in% paste(conteos$strain, conteos$condition))
+
+# Crear el grÃ¡fico boxplot
+boxplotD2 <- ggplot(filter_Day2, aes(x = cell, y = cyto_value, pattern = cell, fill=strain, color=cell)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) +
+  geom_point(aes(shape = cell), size=2, alpha=.5, position = position_jitterdodge()) +
+  facet_wrap(~strain + condition, nrow = 4, scales = "free_y") +
+  theme_bw() +
+  labs(y = "Log-fold Change", x = "Strain", title = "Day 6") +
+  theme(axis.title = element_text(size = rel(1.5)),
+        axis.text = element_text(size = rel(1.2)),
+        plot.title = element_text(size = rel(1.8)),
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+            position = position_dodge(width = 0.75),
+            size = 3.5, vjust = 0) +
+  mycolorsTB::scale_fill_mycolors() +
+  scale_color_manual(values=c("#000000", "#b3b1b1"))
+
+boxplotD2 + geom_hline(yintercept=1, linetype="dashed", color = "red") + stat_compare_means(aes(group = cell), method="wilcox.test", label = "p.signif") 
 ```
 :::
+:::
+
 ## Split by Cell check time progression
-::: {.panel-tabset}
+
+::: panel-tabset
 ## THP-1
-```{r fig.height=6, fig.width=8, message=FALSE, warning=FALSE}
-filter_Day2 <- filter(raw_data, Cell == "THP1")
+
+::: panel-tabset
+#### Concat
+
+```{r fig.height=4, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+filter_Day2 <- filter(controls_no_outliers, cell == "THP1")
+filter_Day2$day <- as.factor(filter_Day2$day)
 conteos <- filter_Day2 %>%
-  group_by(Strain, Day, Cell_Type) %>%
-  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
-# Crear el gráfico boxplot con patrones
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, pattern = Day, fill=Strain, color=Day)) +
-  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = Day), size=2, alpha=.5,position = position_jitterdodge()) + theme_bw()+
-facet_wrap(~ Cell_Type, nrow = 2, scales = "free_y") +
-labs(y = "Log-fold Change", x = "", title = "THP-1") +
+  group_by(strain, day, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+# Crear el grÃ¡fico boxplot con patrones
+boxplotD2 <- ggplot(filter_Day2, aes(x = strain, y = cyto_value, pattern = day, fill=strain, color=day)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = day), size=2, alpha=.5,position = position_jitterdodge()) + 
+#facet_wrap(strain~condition, nrow = 2, scales = "free_y") +
+  facet_wrap(~condition, nrow = 1, scales = "free_y") +
+theme_bw() +
+labs(y = "Log-fold Change", x = "Strain", title = "THP-1") +
 theme(axis.title = element_text(size = rel(1.5)),
 axis.text = element_text(size = rel(1.2)),
 plot.title = element_text(size = rel(1.8)),
 strip.text = element_text(size = rel(1.2))) +
 geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
 position = position_dodge(width = 0.75),
-size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))  
-boxplotD2+ stat_compare_means(aes(group = Day), method="wilcox.test", label = "p.signif") + labs(y = "Log-fold Change", x = "", title = "THP-1") 
-
+size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))
+boxplotD2 + stat_compare_means(aes(group = day), method = "wilcox.test", label = "p.signif") + geom_hline(yintercept=1, linetype="dashed", color = "red")+theme_pubr()
 ```
-## BoMac
-```{r fig.height=6, fig.width=8, message=FALSE, warning=FALSE}
-filter_Day2 <- filter(raw_data, Cell == "BoMac")
+```{r fig.height=4, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+fill_colors <- c("High" = "#e76f51", "Intermedium" = "#e9c46a", "Low" = "#2a9d8f","L6" = "#1eb040", "L5" = "#995200", "A1" = "#d1ae00", "A4" = "#ff9cdb" , "2"="grey", "6"="#26beff")  # Reemplaza A, B, C con tus grupos
+point_colors <- c("High" = "#e76f51", "Intermedium" = "#e9c46a", "Low" = "#2a9d8f","L6" = "#1eb040", "L5" = "#995200", "A1" = "#d1ae00", "A4" = "#ff9cdb" , "2"="grey", "6"="#26beff")  # Reemplaza 1, 2, 3 con tus días
+
+filter_Day2 <- controls_no_outliers
+filter_Day2$day <- as.factor(filter_Day2$day)
+
+medias <- filter_Day2 %>%
+  group_by(combined, day, condition) %>%
+  summarize(
+    N = sum(!is.na(cyto_value)),
+    max_value = max(cyto_value, na.rm = TRUE), 
+    mean_value = mean(cyto_value, na.rm = TRUE),  
+    sd_value = sd(cyto_value, na.rm = TRUE),  
+    sem_value = sd(cyto_value, na.rm = TRUE) / sqrt(N), 
+    .groups = 'drop' 
+  )
+
 conteos <- filter_Day2 %>%
-  group_by(Strain, Day, Cell_Type) %>%
-  summarize(N = n(), max_value = max(logfold, na.rm = TRUE), .groups = 'drop')
-# Crear el gráfico boxplot con patrones
-boxplotD2 <- ggplot(filter_Day2, aes(x = Strain, y = logfold, pattern = Day, fill=Strain, color=Day)) +
-  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = Day), size=2, alpha=.5,position = position_jitterdodge()) +theme_bw()+ 
-facet_wrap(~ Cell_Type, nrow = 2, scales = "free_y") +
-labs(y = "Log-fold Change", x = "", title = "BoMac")  +
+  group_by(combined, day, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+# Crear el grÃ¡fico boxplot con patrones
+boxplotD2 <- ggplot(filter_Day2, aes(x = combined, y = cyto_value, pattern = day)) +
+  geom_boxplot_pattern(aes(fill = combined), outlier.shape = NA, pattern_density = 0.05) +
+  geom_point(aes(color = day, shape = cell), size = 2, alpha = 0.5, position = position_jitterdodge()) +
+  facet_wrap(~condition, nrow = 1, scales = "free_y") +
+  theme_bw() +
+  labs(y = "Log-fold Change", x = "", title = "") +
+  theme(axis.title = element_text(size = rel(1.5)),
+        axis.text = element_text(size = rel(1.2)),
+        plot.title = element_text(size = rel(1.8)),
+        strip.text = element_text(size = rel(1.2))) +
+  geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+            position = position_dodge(width = 0.75),
+            size = 3.5, vjust = 0) +
+  scale_color_manual(values = fill_colors) +
+  scale_fill_manual(values = fill_colors) +
+  stat_compare_means(method = "wilcox.test",aes(label = paste0("p = ", after_stat(p.format)))) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
+  theme_pubr()
+
+# Mostrar el gráfico
+print(boxplotD2)
+```
+
+
+#### Split
+
+```{r fig.height=12, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+filter_Day2 <- filter(controls_no_outliers, cell == "THP1")
+filter_Day2$day <- as.factor(filter_Day2$day)
+conteos <- filter_Day2 %>%
+  group_by(strain, day, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+# Crear el grÃ¡fico boxplot con patrones
+boxplotD2 <- ggplot(filter_Day2, aes(x = day, y = cyto_value, pattern = day, fill=strain, color=day)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = day), size=2, alpha=.5,position = position_jitterdodge()) + 
+#facet_wrap(strain~condition, nrow = 2, scales = "free_y") +
+  facet_wrap(strain~condition, nrow = 4, scales = "free_y") +
+theme_bw() +
+labs(y = "Log-fold Change", x = "Strain", title = "THP-1") +
 theme(axis.title = element_text(size = rel(1.5)),
 axis.text = element_text(size = rel(1.2)),
 plot.title = element_text(size = rel(1.8)),
-strip.text = element_text(size = rel(1.2)))+
+strip.text = element_text(size = rel(1.2))) +
 geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
 position = position_dodge(width = 0.75),
 size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))
-boxplotD2+ stat_compare_means(aes(group = Day), method="wilcox.test", label = "p.signif")
+boxplotD2 + geom_hline(yintercept=1, linetype="dashed", color = "red") + stat_compare_means(aes(group =  day), method="wilcox.test", label = "p.signif")+theme_pubr()
 ```
 :::
-::::
-:::::
 
-# PCA Analysis
+## BoMac
 
-## All Strains Day 2
-```{r}
-datos_longD6 <- filter(raw_data, Day == "D2")
-#datos_longD6 <- raw_data %>%  filter(Day == "D6", Strain %in% c("L5", "A4"))
-datos_anchos <- datos_longD6 %>%
-  pivot_wider(names_from = Cell_Type, values_from = logfold)
-datos_anchosOG <- datos_longD6 %>%
-  pivot_wider(names_from = Cell_Type, values_from = logfold )
-datos_anchos$Experiment<-NULL
-datos_anchos$ID<-NULL
-datos_anchos$Day<-NULL
-datos_anchos<-na.omit(datos_anchos)
-datos_anchosOG<-na.omit(datos_anchosOG)
-# Realizar el PCA
-pca_resultado <- prcomp(datos_anchos[, -c(1,2)], center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
-pca_df <- as.data.frame(pca_resultado$x)
-pca_df$Strain <- datos_anchos$Strain
-pca_df$Cell <- datos_anchos$Cell
-pca_df$Experiment <- datos_anchosOG$Experiment
+::: panel-tabset
+#### Concat
+
+```{r fig.height=5, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+filter_Day2 <- filter(controls_no_outliers, cell == "BoMac")
+filter_Day2$day <- as.factor(filter_Day2$day)
+
+medias <- filter_Day2 %>%
+  group_by(strain, day, condition) %>%
+  summarize(
+    N = sum(!is.na(cyto_value)),
+    max_value = max(cyto_value, na.rm = TRUE), 
+    mean_value = mean(cyto_value, na.rm = TRUE),  
+    sd_value = sd(cyto_value, na.rm = TRUE),  
+    sem_value = sd(cyto_value, na.rm = TRUE) / sqrt(N), 
+    .groups = 'drop' 
+  )
+
+conteos <- filter_Day2 %>%
+  group_by(strain, day, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+# Crear el grÃ¡fico boxplot con patrones
+boxplotD2 <- ggplot(filter_Day2, aes(x = strain, y = cyto_value, pattern = day, fill=strain, color=day)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = day), size=2, alpha=.5,position = position_jitterdodge()) + 
+#facet_wrap(strain~condition, nrow = 2, scales = "free_y") +
+  facet_wrap(~condition, nrow = 1, scales = "free_y") +
+theme_bw() +
+labs(y = "Log-fold Change", x = "Strain", title = "BoMac") +
+theme(axis.title = element_text(size = rel(1.5)),
+axis.text = element_text(size = rel(1.2)),
+plot.title = element_text(size = rel(1.8)),
+strip.text = element_text(size = rel(1.2))) +
+geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+position = position_dodge(width = 0.75),
+size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))
+boxplotD2 + stat_compare_means(aes(group =  day), method="wilcox.test", label = "p.signif")  + geom_hline(yintercept=1, linetype="dashed", color = "red")+theme_pubr()
 ```
-### Stats
-::::: {.panel-tabset}
+
+#### Split
+
+```{r fig.height=12, fig.width=10,echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+filter_Day2 <- filter(controls_no_outliers, cell == "BoMac")
+filter_Day2$day <- as.factor(filter_Day2$day)
+conteos <- filter_Day2 %>%
+  group_by(strain, day, condition) %>%
+  summarize(N = n(), max_value = max(cyto_value, na.rm = TRUE), .groups = 'drop')
+# Crear el grÃ¡fico boxplot con patrones
+boxplotD2 <- ggplot(filter_Day2, aes(x = day, y = cyto_value, pattern = day, fill=strain, color=day)) +
+  geom_boxplot_pattern(outlier.shape = NA, pattern_density = 0.05) + geom_point(aes(shape = day), size=2, alpha=.5,position = position_jitterdodge()) + 
+#facet_wrap(strain~condition, nrow = 2, scales = "free_y") +
+  facet_wrap(strain~condition, nrow = 4, scales = "free_y") +
+theme_bw() +
+labs(y = "Log-fold Change", x = "Strain", title = "BoMac") +
+theme(axis.title = element_text(size = rel(1.5)),
+axis.text = element_text(size = rel(1.2)),
+plot.title = element_text(size = rel(1.8)),
+strip.text = element_text(size = rel(1.2))) +
+geom_text(data = conteos, aes(label = N, y = max_value * 1.05),
+position = position_dodge(width = 0.75),
+size = 3.5, vjust = 0)+mycolorsTB::scale_fill_mycolors()+ scale_color_manual(values=c("#000000", "#b3b1b1"))
+boxplotD2  + geom_hline(yintercept=1, linetype="dashed", color = "red") + stat_compare_means(aes(group =  day), method="wilcox.test", label = "p.signif")
+```
+:::
+:::
+:::
+
+# Make PCA
+
+In the PCA each point is the mean of cell, day and strain \## Datatable
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+list_of_dfs <- list(c2t, c2b, c6b, c6t)
+
+controls_no_outliers <- bind_rows(list_of_dfs)
+
+controls_no_outliers$lower_bound  <- NULL
+controls_no_outliers$upper_bound <- NULL
+controls_no_outliers <- controls_no_outliers %>%
+  mutate(combined = paste(cell, strain, sep="-"))
+controls_no_outliers <- controls_no_outliers %>%
+  mutate(combined = case_when(
+    combined %in% c("THP1-A1", "THP1-L6","BoMac-A1","BoMac-L6") ~ "Intermedium",
+    combined %in% c("THP1-L5","BoMac-A4") ~ "High",
+    combined %in% c("BoMac-L5","THP1-A4") ~ "Low",
+    TRUE ~ combined  # Esto mantiene los valores originales para todos los otros casos
+  ))
+
+controls_no_outliers2 <- controls_no_outliers %>%
+  group_by(condition,day, combined) %>%
+  summarise(cyto_value = mean(cyto_value, na.rm = TRUE))
+datatable(controls_no_outliers2)
+controls_wide1 <- controls_no_outliers2 %>%
+  pivot_wider(names_from = condition, values_from = cyto_value)
+controls_wide1 <- na.omit(controls_wide1)
+controls_wide2 <- controls_no_outliers2 %>%
+  pivot_wider(names_from = condition, values_from = cyto_value)
+# Realizar el PCA
+controls_wide2$cell <- NULL
+controls_wide2$strain <- NULL
+datos_para_pca <- controls_wide2 %>%
+  dplyr::select(necrosis, apoptosis, live)  # Selecciona solo las columnas de interÃ©s
+datos_para_pca <-  na.omit(datos_para_pca)
+datos_para_pca$day<-NULL
+pca_resultado <- prcomp(datos_para_pca, center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
+pca_df <- as.data.frame(pca_resultado$x)
+pca_df$strain <- controls_wide1$strain
+pca_df$cell <- controls_wide1$cell
+pca_df$day <- controls_wide1$day
+pca_df$combined <- controls_wide1$combined
+controls_wide1$day <- as.factor(controls_wide1$day)
+```
+
+## Stats
+
+::: panel-tabset
 # Scree Plot
-```{r, warning=FALSE,message=FALSE}
-res.pca <- PCA(datos_anchos[, -c(1,2)], graph = FALSE)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+res.pca <- PCA(datos_para_pca, graph = FALSE)
 
 var <- get_pca_var(res.pca)
 eig.val <- get_eigenvalue(res.pca)
 fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
-
 ```
+
 # Corrplot
+
 ```{r, warning=FALSE,message=FALSE}
 corrplot(var$cos2, is.corr=FALSE)
 ```
-:::::
-### Raw PCA
-:::::: {.panel-tabset}
-# PC1-PC2
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+:::
+
+## PCA
+
+### PC1-PC2
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+autoplot(pca_resultado, data = controls_wide1, colour = 'combined', size = "day", alpha=.7,
          loadings = TRUE, loadings.colour = 'black',
          loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
+         x = 1, y = 2) + theme_minimal()
 ```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
+
+### PC2-PC3
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+autoplot(pca_resultado, data = controls_wide1, colour = 'combined', size = "day", alpha=.7,
          loadings = TRUE, loadings.colour = 'black',
          loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
+         x = 2, y = 3) + theme_minimal()
 ```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
+
+###  PC1-PC3
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+autoplot(pca_resultado, data = controls_wide1, colour = 'combined', shape = 'day', alpha=.7,
          loadings = TRUE, loadings.colour = 'black',
          loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
+         x = 1, y = 3) + theme_minimal()
 ```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-# PC2-PC3
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-# PC1-PC3
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-::::::
-### PCA in 3D
-```{r,warning=FALSE}
+
+## PCA in 3D
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
 # Realizar PCA manteniendo los tres primeros componentes principales
-pca_resultado <- prcomp(datos_anchos[, -c(1,2)], scale. = TRUE, center = TRUE, rank. = 3)
+pca_resultado <- prcomp(datos_para_pca, scale. = TRUE, center = TRUE, rank. = 3)
 
 # Convertir los resultados a un dataframe para plotly
 pca_scores <- as.data.frame(pca_resultado$x[, 1:3])
-pca_scores$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-# Gráfico interactivo con plotly
+pca_scores$combine <- controls_wide1$combined
+# GrÃ¡fico interactivo con plotly
 library(plotly)
 
-# Suponiendo que pca_scores y loadings ya están definidos
+# Suponiendo que pca_scores y loadings ya estÃ¡n definidos
 
-# Factor de escala para las líneas de carga
+# Factor de escala para las lÃ­neas de carga
 scale.loads <- 5
 loadings <- pca_resultado$rotation[, 1:3]
 nombres_variables <- rownames(loadings)
-# Crear el gráfico de los puntajes del PCA
+# Crear el grÃ¡fico de los puntajes del PCA
 p_scores <- plot_ly(pca_scores, x = ~PC1, y = ~PC2, z = ~PC3, type = 'scatter3d', mode = 'markers',
-                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "cyan","brown", "turquoise", "black"), 
+                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"), 
                     marker = list(size = 5)) %>%
              layout(title = "PCA Tridimensional",
                     scene = list(xaxis = list(title = 'PC1'),
                                  yaxis = list(title = 'PC2'),
                                  zaxis = list(title = 'PC3')))
 
-# Crear un gráfico en blanco para las líneas de carga
+# Crear un grÃ¡fico en blanco para las lÃ­neas de carga
 p_loadings <- plot_ly() %>%
               layout(scene = list(xaxis = list(title = 'PC1'),
                                   yaxis = list(title = 'PC2'),
                                   zaxis = list(title = 'PC3')))
 
-# Agregar las líneas de carga al gráfico
+# Agregar las lÃ­neas de carga al grÃ¡fico
 for (i in 1:nrow(loadings)) {
     p_loadings <- p_loadings %>% add_trace(
         x = c(0, loadings[i, 1]) * scale.loads,
@@ -923,1545 +1749,216 @@ for (i in 1:nrow(loadings)) {
     )
 }
 
-# Combinar los dos gráficos
+# Combinar los dos grÃ¡ficos
 p_final <- subplot(p_loadings, p_scores, nrows = 1)
 
-# Mostrar el gráfico combinado
+# Mostrar el grÃ¡fico combinado
 p_final
 ```
-### PCA with Areas
-::::: {.panel-tabset}
-# For Cell Type
-:::: {.panel-tabset}
-## PC1-PC2
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC2-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC1-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-::::
-# For Strain-Cell Type
-:::: {.panel-tabset}
-## PC1-PC2
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+
+## PCA with Areas
+
+
+### PC1-PC2
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+controls_wide1$combine <- controls_wide1$combined
 fviz_pca_biplot(res.pca,
                 axes = c(1, 2), 
                 # Individuals
                 geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
+                fill.ind = controls_wide1$combine, col.ind = "black",
                 pointshape = 21, pointsize = 2,
                  palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
                 addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
+                col.var = "contrib",
+                gradient.cols =  c("#00AFBB", "#E7B800", "#FC4E07"),
                 
                 legend.title = list(fill = "Species", color = "Contrib",
                                     alpha = "Contrib")
                 )
 ```
+
 ## PC2-PC3
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
 fviz_pca_biplot(res.pca,
                 axes = c(2, 3), 
                 # Individuals
                 geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
+                fill.ind = controls_wide1$combine, col.ind = "black",
                 pointshape = 21, pointsize = 2,
                  palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
                 addEllipses = TRUE,
                 # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
+                col.var = "contrib",
+                gradient.cols =  c("#00AFBB", "#E7B800", "#FC4E07"),
                 legend.title = list(fill = "Species", color = "Contrib",
                                     alpha = "Contrib")
                 )
-
 ```
+
 ## PC1-PC3
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
 fviz_pca_biplot(res.pca,
                 axes = c(1, 3), 
                 # Individuals
                 geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
+                fill.ind = controls_wide1$combine, col.ind = "black",
                 pointshape = 21, pointsize = 2,
                  palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
                 addEllipses = TRUE,
                 # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
+                col.var = "contrib",
+                gradient.cols =  c("#00AFBB", "#E7B800", "#FC4E07"),
                 
                 legend.title = list(fill = "Species", color = "Contrib",
                                     alpha = "Contrib")
                 )
-
 ```
-::::
-:::::
 
-## All Strains Day 6
-```{r}
-datos_longD6 <- filter(raw_data, Day == "D6")
-#datos_longD6 <- raw_data %>%  filter(Day == "D6", Strain %in% c("L5", "A4"))
-datos_anchos <- datos_longD6 %>%
-  pivot_wider(names_from = Cell_Type, values_from = logfold)
-datos_anchosOG <- datos_longD6 %>%
-  pivot_wider(names_from = Cell_Type, values_from = logfold )
-datos_anchos$Experiment<-NULL
-datos_anchos$ID<-NULL
-datos_anchos$Day<-NULL
-datos_anchos<-na.omit(datos_anchos)
-datos_anchosOG<-na.omit(datos_anchosOG)
-# Realizar el PCA
-pca_resultado <- prcomp(datos_anchos[, -c(1,2)], center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
-pca_df <- as.data.frame(pca_resultado$x)
-pca_df$Strain <- datos_anchos$Strain
-pca_df$Cell <- datos_anchos$Cell
-pca_df$Experiment <- datos_anchosOG$Experiment
+## PCA by Day
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = controls_wide1$day, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                addEllipses = TRUE,
+                col.var = "contrib",
+                gradient.cols =  c("#00AFBB", "#E7B800", "#FC4E07"),
+                
+                legend.title = list(fill = "Day", color = "Contrib",
+                                    alpha = "Contrib")
+                )
 ```
-### Stats
-::::: {.panel-tabset}
-# Scree Plot
-```{r, warning=FALSE,message=FALSE}
-res.pca <- PCA(datos_anchos[, -c(1,2)], graph = FALSE)
 
-var <- get_pca_var(res.pca)
-eig.val <- get_eigenvalue(res.pca)
+## PCA Combo 
+::: panel-tabset
+### PCA Combo Day 2
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+datos_para_pca$day <- as.factor(controls_wide1$day)
+datos_para_pca$cell <- controls_wide1$cell
+b2_w1 <- filter(controls_wide1, day == "2")
+b2_w2 <- filter(datos_para_pca, day == "2")
+b2_w2$day  <- NULL
+b2_w2$cell  <- NULL
+res.pca <- PCA(b2_w2, graph = FALSE)
+fviz_pca_biplot(res.pca,
+                axes = c(1, 2), 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = b2_w1$combined, col.ind = "black",
+                pointshape = 21, pointsize = 2,
+                palette = c("#d1ae00", "#ff9cdb", "#995200","#1eb040"),
+                addEllipses = TRUE,
+                col.var = "contrib",
+                gradient.cols =  c("#00AFBB", "#E7B800", "#FC4E07"),
+                legend.title = list(fill = "Cell", color = "Contrib",
+                                    alpha = "Contrib")
+                )
+```
+
+### Scree plot
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
 fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
-
 ```
-# Corrplot
-```{r, warning=FALSE,message=FALSE}
+
+### Corrplot
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
 corrplot(var$cos2, is.corr=FALSE)
 ```
-:::::
-### Raw PCA
-:::::: {.panel-tabset}
-# PC1-PC2
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-# PC2-PC3
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-# PC1-PC3
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-::::::
-### PCA in 3D
-```{r,warning=FALSE}
-# Realizar PCA manteniendo los tres primeros componentes principales
-pca_resultado <- prcomp(datos_anchos[, -c(1,2)], scale. = TRUE, center = TRUE, rank. = 3)
+:::
 
-# Convertir los resultados a un dataframe para plotly
-pca_scores <- as.data.frame(pca_resultado$x[, 1:3])
-pca_scores$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-# Gráfico interactivo con plotly
-library(plotly)
+## PCA Combo Day 6
 
-# Suponiendo que pca_scores y loadings ya están definidos
+::: panel-tabset
+### PCA
 
-# Factor de escala para las líneas de carga
-scale.loads <- 5
-loadings <- pca_resultado$rotation[, 1:3]
-nombres_variables <- rownames(loadings)
-nombres_variables <- rownames(loadings)
-# Crear el gráfico de los puntajes del PCA
-p_scores <- plot_ly(pca_scores, x = ~PC1, y = ~PC2, z = ~PC3, type = 'scatter3d', mode = 'markers',
-                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "cyan","brown", "turquoise", "black"), 
-                    marker = list(size = 5)) %>%
-             layout(title = "PCA Tridimensional",
-                    scene = list(xaxis = list(title = 'PC1'),
-                                 yaxis = list(title = 'PC2'),
-                                 zaxis = list(title = 'PC3')))
-
-# Crear un gráfico en blanco para las líneas de carga
-p_loadings <- plot_ly() %>%
-              layout(scene = list(xaxis = list(title = 'PC1'),
-                                  yaxis = list(title = 'PC2'),
-                                  zaxis = list(title = 'PC3')))
-
-# Agregar las líneas de carga al gráfico
-for (i in 1:nrow(loadings)) {
-    p_loadings <- p_loadings %>% add_trace(
-        x = c(0, loadings[i, 1]) * scale.loads,
-        y = c(0, loadings[i, 2]) * scale.loads,
-        z = c(0, loadings[i, 3]) * scale.loads,
-        type = "scatter3d", mode = "lines",
-        text = nombres_variables[i], # Nombre de la variable
-        line = list(color = "black", width = 2)
-    )
-}
-
-# Combinar los dos gráficos
-p_final <- subplot(p_loadings, p_scores, nrows = 1)
-
-# Mostrar el gráfico combinado
-p_final
-```
-
-### PCA with Areas
-::::: {.panel-tabset}
-# For Cell Type
-:::: {.panel-tabset}
-## PC1-PC2
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC2-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC1-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-::::
-# For Strain-Cell Type
-:::: {.panel-tabset}
-## PC1-PC2
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
+datos_para_pca$day <- as.factor(controls_wide1$day)
+datos_para_pca$cell <- controls_wide1$cell
+b2_w1 <- filter(controls_wide1, day == "6")
+b2_w2 <- filter(datos_para_pca, day == "6")
+b2_w2$day  <- NULL
+b2_w2$cell  <- NULL
+res.pca <- PCA(b2_w2, graph = FALSE)
 fviz_pca_biplot(res.pca,
                 axes = c(1, 2), 
                 # Individuals
                 geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
+                fill.ind = b2_w1$combined, col.ind = "black",
                 pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
+                palette = c("#d1ae00", "#ff9cdb", "#995200","#1eb040"),
                 addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
+                col.var = "contrib",
+                gradient.cols =  c("#00AFBB", "#E7B800", "#FC4E07"),
+                legend.title = list(fill = "Strain", color = "Contribution",
+                                    alpha = "Contribution")
+                ) + ggtitle("BoMac Day 6") + theme_par()
 ```
-## PC2-PC3
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(2, 3), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
 
-```
-## PC1-PC3
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(1, 3), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
+### Scree plot
 
-```
-::::
-:::::
-
-## A4-L5 Strains Day 2
-```{r}
-#datos_longD6 <- filter(raw_data, Day == "D6")
-datos_longD6 <- raw_data %>%  filter(Day == "D2", Strain %in% c("L5", "A4"))
-datos_anchos <- datos_longD6 %>%
-  pivot_wider(names_from = Cell_Type, values_from = logfold)
-datos_anchosOG <- datos_longD6 %>%
-  pivot_wider(names_from = Cell_Type, values_from = logfold )
-datos_anchos$Experiment<-NULL
-datos_anchos$ID<-NULL
-datos_anchos$Day<-NULL
-datos_anchos<-na.omit(datos_anchos)
-datos_anchosOG<-na.omit(datos_anchosOG)
-# Realizar el PCA
-pca_resultado <- prcomp(datos_anchos[, -c(1,2)], center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
-pca_df <- as.data.frame(pca_resultado$x)
-pca_df$Strain <- datos_anchos$Strain
-pca_df$Cell <- datos_anchos$Cell
-pca_df$Experiment <- datos_anchosOG$Experiment
-```
-### Stats
-::::: {.panel-tabset}
-# Scree Plot
-```{r, warning=FALSE,message=FALSE}
-res.pca <- PCA(datos_anchos[, -c(1,2)], graph = FALSE)
-
-var <- get_pca_var(res.pca)
-eig.val <- get_eigenvalue(res.pca)
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
 fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
-
 ```
-# Corrplot
-```{r, warning=FALSE,message=FALSE}
+
+### Corrplot
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.extra='style="display: block; margin: auto;"'}
 corrplot(var$cos2, is.corr=FALSE)
 ```
-:::::
-### Raw PCA
-:::::: {.panel-tabset}
-# PC1-PC2
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-# PC2-PC3
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-# PC1-PC3
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-::::::
-### PCA in 3D
-```{r,warning=FALSE}
-# Realizar PCA manteniendo los tres primeros componentes principales
-pca_resultado <- prcomp(datos_anchos[, -c(1,2)], scale. = TRUE, center = TRUE, rank. = 3)
+:::
+:::
 
-# Convertir los resultados a un dataframe para plotly
-pca_scores <- as.data.frame(pca_resultado$x[, 1:3])
-pca_scores$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-# Gráfico interactivo con plotly
-library(plotly)
-
-# Suponiendo que pca_scores y loadings ya están definidos
-
-# Factor de escala para las líneas de carga
-scale.loads <- 5
-loadings <- pca_resultado$rotation[, 1:3]
-nombres_variables <- rownames(loadings)
-# Crear el gráfico de los puntajes del PCA
-p_scores <- plot_ly(pca_scores, x = ~PC1, y = ~PC2, z = ~PC3, type = 'scatter3d', mode = 'markers',
-                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "cyan","brown", "turquoise", "black"), 
-                    marker = list(size = 5)) %>%
-             layout(title = "PCA Tridimensional",
-                    scene = list(xaxis = list(title = 'PC1'),
-                                 yaxis = list(title = 'PC2'),
-                                 zaxis = list(title = 'PC3')))
-
-# Crear un gráfico en blanco para las líneas de carga
-p_loadings <- plot_ly() %>%
-              layout(scene = list(xaxis = list(title = 'PC1'),
-                                  yaxis = list(title = 'PC2'),
-                                  zaxis = list(title = 'PC3')))
-
-# Agregar las líneas de carga al gráfico
-for (i in 1:nrow(loadings)) {
-    p_loadings <- p_loadings %>% add_trace(
-        x = c(0, loadings[i, 1]) * scale.loads,
-        y = c(0, loadings[i, 2]) * scale.loads,
-        z = c(0, loadings[i, 3]) * scale.loads,
-        type = "scatter3d", mode = "lines",
-        text = nombres_variables[i], # Nombre de la variable
-        line = list(color = "black", width = 2)
-    )
-}
-
-# Combinar los dos gráficos
-p_final <- subplot(p_loadings, p_scores, nrows = 1)
-
-# Mostrar el gráfico combinado
-p_final
-```
-
-### PCA with Areas
-::::: {.panel-tabset}
-# For Cell Type
-:::: {.panel-tabset}
-## PC1-PC2
+# Spider Plot
+## Day 2
 ```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
+library(ggradar)
+lcols <- c("#e76f51","#e9c46a", "#2a9d8f")
+# Filtrar datos para el día 6
+data_day6 <- controls_wide1 %>%
+  filter(day == 2)
+d6 <-as.data.frame(data_day6)
+d6$day<-NULL
+d6$combine <-NULL
+ggradar(d6,
+        group.colours = lcols,
+        background.circle.colour = "white",
+        axis.line.colour = "gray60",
+        gridline.min.colour = "gray60",
+        gridline.mid.colour = "gray60",
+        gridline.max.colour = "gray60",
+        gridline.min.linetype = 1,
+        gridline.mid.linetype = 1,
+        gridline.max.linetype = 1,
+        legend.position = "bottom")
 ```
-## PC2-PC3
+
+## Day 6
 ```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
+library(ggradar)
+lcols <- c("#e76f51","#e9c46a", "#2a9d8f")
+# Filtrar datos para el día 6
+data_day6 <- controls_wide1 %>%
+  filter(day == 6)
+d6 <-as.data.frame(data_day6)
+d6$day<-NULL
+d6$combine <-NULL
+ggradar(d6,
+        group.colours = lcols,
+        background.circle.colour = "white",
+        axis.line.colour = "gray60",
+        gridline.min.colour = "gray60",
+        gridline.mid.colour = "gray60",
+        gridline.max.colour = "gray60",
+        gridline.min.linetype = 1,
+        gridline.mid.linetype = 1,
+        gridline.max.linetype = 1,
+        legend.position = "bottom")
 ```
-## PC1-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-::::
-# For Strain-Cell Type
-:::: {.panel-tabset}
-## PC1-PC2
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(1, 2), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC2-PC3
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(2, 3), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-
-```
-## PC1-PC3
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(1, 3), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-
-```
-::::
-:::::
-
-## A4-L5 Strains Day 6
-```{r}
-#datos_longD6 <- filter(raw_data, Day == "D6")
-datos_longD6 <- raw_data %>%  filter(Day == "D6", Strain %in% c("L5", "A4"))
-datos_anchos <- datos_longD6 %>%
-  pivot_wider(names_from = Cell_Type, values_from = logfold)
-datos_anchosOG <- datos_longD6 %>%
-  pivot_wider(names_from = Cell_Type, values_from = logfold )
-datos_anchos$Experiment<-NULL
-datos_anchos$ID<-NULL
-datos_anchos$Day<-NULL
-datos_anchos<-na.omit(datos_anchos)
-datos_anchosOG<-na.omit(datos_anchosOG)
-# Realizar el PCA
-pca_resultado <- prcomp(datos_anchos[, -c(1,2)], center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
-pca_df <- as.data.frame(pca_resultado$x)
-pca_df$Strain <- datos_anchos$Strain
-pca_df$Cell <- datos_anchos$Cell
-pca_df$Experiment <- datos_anchosOG$Experiment
-```
-### Stats
-::::: {.panel-tabset}
-# Scree Plot
-```{r, warning=FALSE,message=FALSE}
-res.pca <- PCA(datos_anchos[, -c(1,2)], graph = FALSE)
-
-var <- get_pca_var(res.pca)
-eig.val <- get_eigenvalue(res.pca)
-fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
-
-```
-# Corrplot
-```{r, warning=FALSE,message=FALSE}
-corrplot(var$cos2, is.corr=FALSE)
-```
-:::::
-### Raw PCA
-:::::: {.panel-tabset}
-# PC1-PC2
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-# PC2-PC3
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-# PC1-PC3
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Experiment',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-::::::
-### PCA in 3D
-```{r,warning=FALSE}
-# Realizar PCA manteniendo los tres primeros componentes principales
-pca_resultado <- prcomp(datos_anchos[, -c(1,2)], scale. = TRUE, center = TRUE, rank. = 3)
-
-# Convertir los resultados a un dataframe para plotly
-pca_scores <- as.data.frame(pca_resultado$x[, 1:3])
-pca_scores$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-# Gráfico interactivo con plotly
-library(plotly)
-
-# Suponiendo que pca_scores y loadings ya están definidos
-
-# Factor de escala para las líneas de carga
-scale.loads <- 5
-loadings <- pca_resultado$rotation[, 1:3]
-nombres_variables <- rownames(loadings)
-# Crear el gráfico de los puntajes del PCA
-p_scores <- plot_ly(pca_scores, x = ~PC1, y = ~PC2, z = ~PC3, type = 'scatter3d', mode = 'markers',
-                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "cyan","brown", "turquoise", "black"), 
-                    marker = list(size = 5)) %>%
-             layout(title = "PCA Tridimensional",
-                    scene = list(xaxis = list(title = 'PC1'),
-                                 yaxis = list(title = 'PC2'),
-                                 zaxis = list(title = 'PC3')))
-
-# Crear un gráfico en blanco para las líneas de carga
-p_loadings <- plot_ly() %>%
-              layout(scene = list(xaxis = list(title = 'PC1'),
-                                  yaxis = list(title = 'PC2'),
-                                  zaxis = list(title = 'PC3')))
-
-# Agregar las líneas de carga al gráfico
-for (i in 1:nrow(loadings)) {
-    p_loadings <- p_loadings %>% add_trace(
-        x = c(0, loadings[i, 1]) * scale.loads,
-        y = c(0, loadings[i, 2]) * scale.loads,
-        z = c(0, loadings[i, 3]) * scale.loads,
-        type = "scatter3d", mode = "lines",
-        text = nombres_variables[i], # Nombre de la variable
-        line = list(color = "black", width = 2)
-    )
-}
-
-# Combinar los dos gráficos
-p_final <- subplot(p_loadings, p_scores, nrows = 1)
-
-# Mostrar el gráfico combinado
-p_final
-```
-
-### PCA with Areas
-::::: {.panel-tabset}
-# For Cell Type
-:::: {.panel-tabset}
-## PC1-PC2
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC2-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC1-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-::::
-# For Strain-Cell Type
-:::: {.panel-tabset}
-## PC1-PC2
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(1, 2), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC2-PC3
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(2, 3), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-
-```
-## PC1-PC3
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(1, 3), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-
-```
-::::
-:::::
-
-## ALL in
-```{r}
-datos_longD6 <- raw_data
-datos_anchos <- datos_longD6 %>%
-  pivot_wider(names_from = Cell_Type, values_from = logfold)
-datos_anchosOG <- datos_longD6 %>%
-  pivot_wider(names_from = Cell_Type, values_from = logfold )
-datos_anchos$Experiment<-NULL
-datos_anchos$ID<-NULL
-datos_anchos$Day<-NULL
-datos_anchos<-na.omit(datos_anchos)
-datos_anchosOG<-na.omit(datos_anchosOG)
-# Realizar el PCA
-pca_resultado <- prcomp(datos_anchos[, -c(1,2)], center = TRUE, scale. = TRUE) # -c(1,2) para excluir Strain y Cell
-pca_df <- as.data.frame(pca_resultado$x)
-pca_df$Strain <- datos_anchos$Strain
-pca_df$Cell <- datos_anchos$Cell
-pca_df$Experiment <- datos_anchosOG$Experiment
-pca_df$Day <- datos_anchosOG$Day
-```
-### Stats
-::::: {.panel-tabset}
-# Scree Plot
-```{r, warning=FALSE,message=FALSE}
-res.pca <- PCA(datos_anchos[, -c(1,2)], graph = FALSE)
-
-var <- get_pca_var(res.pca)
-eig.val <- get_eigenvalue(res.pca)
-fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
-
-```
-# Corrplot
-```{r, warning=FALSE,message=FALSE}
-corrplot(var$cos2, is.corr=FALSE)
-```
-:::::
-### Raw PCA
-:::::: {.panel-tabset}
-# PC1-PC2
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Day
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Day',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Day',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 2)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-# PC2-PC3
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Day
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Day',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By Day
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Day',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 2, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-# PC1-PC3
-::::: {.panel-tabset}
-## Static
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal()
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-autoplot(pca_resultado, data = datos_anchosOG, colour = 'Strain', size="Cell", alpha=.7, shape = 'Day',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_color_mycolors()
-```
-::::
-## Interactive
-:::: {.panel-tabset}
-### By lineage
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchos, colour = 'Strain', shape = 'Cell', alpha=.7,
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ 
-  mycolorsTB::scale_color_mycolors() +
-  mycolorsTB::scale_fill_mycolors() + theme_minimal())
-```
-### By Experiment
-```{r, warning=FALSE,message=FALSE}
-ggplotly(autoplot(pca_resultado, data = datos_anchosOG, colour = 'Cell', fill="Strain", alpha=.7, shape = 'Day',
-         loadings = TRUE, loadings.colour = 'black',
-         loadings.label = TRUE, loadings.label.size = 3,
-         x = 1, y = 3)+ theme_minimal() +  scale_shape_manual(values = c(21, 24,25,22,18,13,12,11,10,9,23,1))+ 
-  mycolorsTB::scale_fill_mycolors())
-```
-::::
-:::::
-::::::
-### PCA in 3D
-```{r,warning=FALSE}
-# Realizar PCA manteniendo los tres primeros componentes principales
-pca_resultado <- prcomp(datos_anchos[, -c(1,2)], scale. = TRUE, center = TRUE, rank. = 3)
-
-# Convertir los resultados a un dataframe para plotly
-pca_scores <- as.data.frame(pca_resultado$x[, 1:3])
-pca_scores$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-# Gráfico interactivo con plotly
-library(plotly)
-
-# Suponiendo que pca_scores y loadings ya están definidos
-
-# Factor de escala para las líneas de carga
-scale.loads <- 5
-loadings <- pca_resultado$rotation[, 1:3]
-nombres_variables <- rownames(loadings)
-# Crear el gráfico de los puntajes del PCA
-p_scores <- plot_ly(pca_scores, x = ~PC1, y = ~PC2, z = ~PC3, type = 'scatter3d', mode = 'markers',
-                    color = ~combine, colors = c("green", "orange", "grey","yellow", "blue", "cyan","brown", "turquoise", "black"), 
-                    marker = list(size = 5)) %>%
-             layout(title = "PCA Tridimensional",
-                    scene = list(xaxis = list(title = 'PC1'),
-                                 yaxis = list(title = 'PC2'),
-                                 zaxis = list(title = 'PC3')))
-
-# Crear un gráfico en blanco para las líneas de carga
-p_loadings <- plot_ly() %>%
-              layout(scene = list(xaxis = list(title = 'PC1'),
-                                  yaxis = list(title = 'PC2'),
-                                  zaxis = list(title = 'PC3')))
-
-# Agregar las líneas de carga al gráfico
-for (i in 1:nrow(loadings)) {
-    p_loadings <- p_loadings %>% add_trace(
-        x = c(0, loadings[i, 1]) * scale.loads,
-        y = c(0, loadings[i, 2]) * scale.loads,
-        z = c(0, loadings[i, 3]) * scale.loads,
-        type = "scatter3d", mode = "lines",
-        text = nombres_variables[i], # Nombre de la variable
-        line = list(color = "black", width = 2)
-    )
-}
-
-# Combinar los dos gráficos
-p_final <- subplot(p_loadings, p_scores, nrows = 1)
-
-# Mostrar el gráfico combinado
-p_final
-```
-
-### PCA with Areas
-::::: {.panel-tabset}
-# For Cell Type
-:::: {.panel-tabset}
-## PC1-PC2
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC2-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC1-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$Cell, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-::::
-# For Day
-:::: {.panel-tabset}
-## PC1-PC2
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 2),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchosOG$Day, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC2-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(2, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchosOG$Day, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC1-PC3
-```{r}
-fviz_pca_biplot(res.pca,
-                axes = c(1, 3),  # Cambiar a los componentes que desees visualizar
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchosOG$Day, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                palette = "jco",
-                addEllipses = TRUE,
-                # Variables
-                alpha.var = "contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-::::
-# For Strain-Cell Type
-:::: {.panel-tabset}
-## PC1-PC2
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(1, 2), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-```
-## PC2-PC3
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(2, 3), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-
-```
-## PC1-PC3
-```{r}
-datos_anchos$combine <- with(datos_anchos, paste(Cell, Strain, sep = "_"))
-fviz_pca_biplot(res.pca,
-                axes = c(1, 3), 
-                # Individuals
-                geom.ind = "point",
-                fill.ind = datos_anchos$combine, col.ind = "black",
-                pointshape = 21, pointsize = 2,
-                 palette = c("green", "orange", "grey","yellow", "blue", "red","purple", "turquoise", "hotpink"),
-                addEllipses = TRUE,
-                # Variables
-                alpha.var ="contrib", col.var = "contrib",
-                gradient.cols = "RdYlBu",
-                
-                legend.title = list(fill = "Species", color = "Contrib",
-                                    alpha = "Contrib")
-                )
-
-```
-::::
-:::::
