@@ -1,0 +1,625 @@
+---
+title: "Effect of infection by day"
+author: "Paula Ruiz Rodriguez"
+date: today
+date-format: "DD/MM/YYYY"
+format:
+  html: 
+    code-fold: true
+    page-layout: article
+    embed-resources: true
+    smooth-scroll: true
+    theme: minty
+    toc: true
+    toc-depth: 5
+    toc-location: left
+    toc-title: Summary
+    number-sections: true
+    grid:
+      sidebar-width: 200px
+      body-width: 1200px
+      margin-width: 100px
+      gutter-width: 1.5rem  
+runtime: shiny
+editor: visual
+---
+
+```{r libraries, message=FALSE, warning=FALSE, echo=FALSE, results = FALSE}
+# List of CRAN and Bioconductor packages to check and install if necessary
+packages <- c("dplyr", "ggplot2", "ggthemes", "writexl", "readxl", "DT", "plotly", "devtools","gplots","pheatmap","ggplotify","VennDiagram")
+
+bioconductor_packages <- c("biomaRt", "clusterProfiler", "DESeq2", "org.Hs.eg.db", 
+                           "org.Bt.eg.db", "aPEAR", "DOSE", "enrichplot", "HTSFilter", "DESeq2", "rrvgo")
+
+# Function to check and install CRAN packages
+check_and_install <- function(package) {
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package, dependencies = TRUE)
+    library(package, character.only = TRUE)
+  }
+}
+
+# Function to check and install Bioconductor packages
+check_and_install_bioc <- function(package) {
+  if (!require(package, character.only = TRUE)) {
+    BiocManager::install(package)
+    library(package, character.only = TRUE)
+  }
+}
+
+# Apply the function to each CRAN package
+sapply(packages, check_and_install)
+
+# Apply the function to each Bioconductor package
+if (!require("BiocManager", character.only = TRUE)) {
+  install.packages("BiocManager")
+}
+sapply(bioconductor_packages, check_and_install_bioc)
+
+# Install ggvenn from GitHub using devtools
+if (!require("ggvenn", character.only = TRUE)) {
+  devtools::install_github("yanlinlin82/ggvenn")
+  library("ggvenn", character.only = TRUE)
+}
+```
+
+```{r colors, echo = FALSE}
+color_virulence <- c("High" = "#FF0000", "Medium" = "#FFA500", "Low" = "#00BFFF","Control" = "lightgrey")
+colores_bact <- c("L5"="#995200","L6"="#02a834","A1"="#d1ae00","A4"="#ff9cdb", "Control"="grey")
+```
+
+```{r metadataTable, echo=FALSE}
+dataTHP1 <- data.frame(
+  sample_name = c("R0366", "R0368", "R0370", "R0201", "R0378", "R0380", "R0420", "R0422", "R0424", "R0426", "R0428", "R0430", "R0168", "R0169", "R0171", "R0187", "R0189", "R0190", "R0318", "R0320", "R0322", "R0330", "R0332", "R0334", "R0196", "R0197", "R0390", "R0394", "R0404"),
+  row.names = c("R0366", "R0368", "R0370", "R0201", "R0378", "R0380", "R0420", "R0422", "R0424", "R0426", "R0428", "R0430", "R0168", "R0169", "R0171", "R0187", "R0189", "R0190", "R0318", "R0320", "R0322", "R0330", "R0332", "R0334", "R0196", "R0197", "R0390", "R0394", "R0404"),
+  BACTERIA = c("A1", "A1", "A1", "A1", "A1", "A1", "A4", "A4", "A4", "A4", "A4", "A4", "Control", "Control", "Control", "Control", "Control", "Control", "L5", "L5", "L5", "L5", "L5", "L5", "L6", "L6", "L6", "L6", "L6"),
+  infection_date = c(1, 1, 1, 3, 3, 3, 1, 1, 1, 3, 3, 3, 1, 1, 1, 3, 3, 3, 1, 1, 1, 3, 3, 3, 3, 3, 1, 1, 3),
+  HOST = rep("THP1", 29),
+  combo = c("A1-THP1", "A1-THP1", "A1-THP1", "A1-THP1", "A1-THP1", "A1-THP1", "A4-THP1", "A4-THP1", "A4-THP1", "A4-THP1", "A4-THP1", "A4-THP1", "Control-THP1", "Control-THP1", "Control-THP1", "Control-THP1", "Control-THP1", "Control-THP1", "L5-THP1", "L5-THP1", "L5-THP1", "L5-THP1", "L5-THP1", "L5-THP1", "L6-THP1", "L6-THP1", "L6-THP1", "L6-THP1", "L6-THP1"),
+  VIRULENCE = c("Medium", "Medium", "Medium", "Medium", "Medium", "Medium", "Low", "Low", "Low", "Low", "Low", "Low", "Control", "Control", "Control", "Control", "Control", "Control", "High", "High", "High", "High", "High", "High", "Medium", "Medium", "Medium", "Medium", "Medium")
+)
+dataBo <- data.frame(
+  sample_name = c("R0230", "R0231", "R0372", "R0374", "R0376", "R0386", "R0348", "R0350", "R0352", "R0360", "R0362", "R0364", "R0235", "R0236", "R0238", "R0251", "R0252", "R0253", "R0324", "R0326", "R0328", "R0336", "R0338", "R0340", "R0212", "R0213", "R0226", "R0227", "R0228", "R0408"),
+  row.names = c("R0230", "R0231", "R0372", "R0374", "R0376", "R0386", "R0348", "R0350", "R0352", "R0360", "R0362", "R0364", "R0235", "R0236", "R0238", "R0251", "R0252", "R0253", "R0324", "R0326", "R0328", "R0336", "R0338", "R0340", "R0212", "R0213", "R0226", "R0227", "R0228", "R0408"),
+  BACTERIA = c("A1", "A1", "A1", "A1", "A1", "A1", "A4", "A4", "A4", "A4", "A4", "A4", "Control", "Control", "Control", "Control", "Control", "Control", "L5", "L5", "L5", "L5", "L5", "L5", "L6", "L6", "L6", "L6", "L6", "L6"),
+  infection_date = c(3, 3, 1, 1, 1, 3, 1, 1, 1, 3, 3, 3, 1, 1, 1, 3, 3, 3, 1, 1, 1, 3, 3, 3, 1, 1, 3, 3, 3, 1),
+  HOST = rep("BoMac", 30),
+  combo = c("A1-BoMac", "A1-BoMac", "A1-BoMac", "A1-BoMac", "A1-BoMac", "A1-BoMac", "A4-BoMac", "A4-BoMac", "A4-BoMac", "A4-BoMac", "A4-BoMac", "A4-BoMac", "Control-BoMac", "Control-BoMac", "Control-BoMac", "Control-BoMac", "Control-BoMac", "Control-BoMac", "L5-BoMac", "L5-BoMac", "L5-BoMac", "L5-BoMac", "L5-BoMac", "L5-BoMac", "L6-BoMac", "L6-BoMac", "L6-BoMac", "L6-BoMac", "L6-BoMac", "L6-BoMac"),
+  VIRULENCE = c("Medium", "Medium", "Medium", "Medium", "Medium", "Medium", "High", "High", "High", "High", "High", "High", "Control", "Control", "Control", "Control", "Control", "Control", "Low", "Low", "Low", "Low", "Low", "Low", "Medium", "Medium", "Medium", "Medium", "Medium", "Medium")
+)
+combined_metadata <- rbind(dataTHP1, dataBo)
+```
+
+```{r readcounts, echo = FALSE}
+count_THP1 <- read.table("humanRawCounts.txt", header=TRUE, row.names=1)
+count_BoMac_samples <- read.table("bosRawCounts.txt", header=TRUE, row.names=1)
+count_THP1_samples <- count_THP1[, dataTHP1$sample_name]
+count_BoMac_samples <- count_BoMac_samples[, dataBo$sample_name]
+rm(count_THP1)
+```
+
+```{r filterreads, echo = FALSE}
+combined_conds <- paste(dataTHP1$BACTERIA, dataTHP1$infection_date, sep = "_")
+filt_count_THP1_samples <- invisible(HTSFilter(count_THP1_samples, conds = combined_conds,plot = F))
+combined_conds <- paste(dataBo$BACTERIA, dataBo$infection_date, sep = "_")
+filt_count_BoMac_samples <- HTSFilter(count_BoMac_samples, conds = combined_conds,plot = F)
+f_thp1 <- filt_count_THP1_samples$filteredData
+f_bomac <- filt_count_BoMac_samples$filteredData
+#all(colnames(f_thp1) == rownames(dataTHP1))
+#all(colnames(f_bomac) == rownames(dataBo))
+rm(filt_count_THP1_samples)
+rm(filt_count_BoMac_samples)
+rm(count_THP1_samples)
+rm(count_BoMac_samples)
+```
+
+```{r rundds, message=FALSE, warning=FALSE, echo=FALSE, results = FALSE}
+create_and_analyze_DESeqDataSet <- function(countData, colData, design_formula) {
+  colData$infection_date <- as.factor(colData$infection_date)
+  dds <- DESeq2::DESeqDataSetFromMatrix(countData = countData, 
+                                        colData = colData, 
+                                        design = as.formula(design_formula))
+  dds <- DESeq2::DESeq(dds)
+  return(dds)
+}
+dataTHP1$INFECTION <- paste(dataTHP1$BACTERIA, dataTHP1$infection_date, sep = "_")
+dataBo$INFECTION <- paste(dataBo$BACTERIA, dataBo$infection_date, sep = "_")
+
+dds_thp1 <- create_and_analyze_DESeqDataSet(f_thp1, dataTHP1, "~ INFECTION")
+dds_bomac <- create_and_analyze_DESeqDataSet(f_bomac, dataBo, "~ INFECTION")
+rm(f_thp1)
+rm(f_bomac)
+vsdata_thp1 <- vst(dds_thp1, blind=FALSE)
+vsdata_bomac <- vst(dds_bomac, blind=FALSE)
+```
+
+```{r functions1, echo = FALSE}
+analyze_and_annotate <- function(dds, contrast, mart_dataset = "hsapiens_gene_ensembl") {
+  resultado <- results(dds, contrast = contrast)
+  
+  # Convertir a dataframe y ordenar por p-value
+  resultadoOrdenado <- as.data.frame(resultado)
+  resultadoOrdenado <- resultadoOrdenado[order(resultadoOrdenado$padj),]
+  
+  resultadoOrdenado$color <- ifelse(resultadoOrdenado$log2FoldChange > 1 & -log10(resultadoOrdenado$padj) > 1.3, "red",
+                                    ifelse(resultadoOrdenado$log2FoldChange < -1 & -log10(resultadoOrdenado$padj) > 1.3, "blue", "grey"))
+  
+  ensembl <- useMart("ensembl", dataset = mart_dataset)
+  
+  genes_info <- getBM(attributes = c('ensembl_gene_id', 'external_gene_name', 'description'),
+                      filters = 'ensembl_gene_id',
+                      values = rownames(resultadoOrdenado),
+                      mart = ensembl)
+  
+  genes_df <- merge(resultadoOrdenado, genes_info, by.x = 'row.names', by.y = 'ensembl_gene_id', all.x = TRUE)
+  
+  return(genes_df)
+}
+
+format_number <- function(x) {
+  sapply(x, function(y) {
+    if (is.na(y)) {
+      return(NA)
+    } else if (abs(y) < .Machine$double.eps ^ 0.5) {
+      return(sprintf("%.5f", 0))  # Cero con 5 decimales
+    } else if (abs(y) < 1e-3 || abs(y) > 1e3) {
+      return(format(y, scientific = TRUE, digits = 5))  # NotaciÃ³n cientÃ­fica para valores muy pequeÃ±os o grandes
+    } else {
+      return(sprintf("%.5f", y))  # Formato normal con 5 decimales para otros valores
+    }
+  })
+}
+
+analyze_filter_export_and_save_table <- function(dds, groups, gene_id, file_name, csv_title, excel_title) {
+    # AnÃ¡lisis y anotaciÃ³n
+    bgenes_df <- analyze_and_annotate(dds, groups, gene_id)
+    
+    # Filtrado de datos
+    bgenes_up <- filter(bgenes_df, color == 'red')
+    bgenes_down <- filter(bgenes_df, color == 'blue')
+    
+    # Exportar a XLSX
+    write_xlsx(bgenes_df, paste0(file_name, ".xlsx"))
+
+    # Crear un nuevo dataframe
+    bgenes_datatable <- data.frame(bgenes_df$Row.names, bgenes_df$external_gene_name, bgenes_df$padj, bgenes_df$log2FoldChange, bgenes_df$color)
+    colnames(bgenes_datatable)<-c("ID","Gene","Padj","log2FoldChange","color")
+    bgenes_datatable$Padj <- format_number(bgenes_datatable$Padj)
+    bgenes_datatable$log2FoldChange <- format_number(bgenes_datatable$log2FoldChange)
+
+    # Mostrar el datatable
+    a<-datatable(bgenes_datatable, 
+              extensions = 'Buttons', 
+              options = list(
+                  dom = 'Bfrtip',
+                  buttons = list(
+                      list(extend = 'csv', title = csv_title),
+                      list(extend = 'excel', title = excel_title),
+                      'pdf',
+                      'print',
+                      'copy'
+                  ),
+                  pageLength = 10,
+                  autoWidth = TRUE,
+                  ordering = TRUE,
+                  lengthMenu = list(c(5, 10, 15, -1), c('5', '10', '15', 'All'))
+              ),
+              class = 'table table-striped table-bordered',
+              filter = 'top',
+          rownames = FALSE)
+
+    # Devolver los objetos
+    return(list(up = bgenes_up, down = bgenes_down, all_data = bgenes_df, dtable=a))
+}
+```
+
+```{r}
+resultados_THP1_L5_1v3 <- analyze_filter_export_and_save_table(
+    dds = dds_thp1,
+    groups = c("INFECTION", "L5_1", "L5_3"),
+    gene_id = "hsapiens_gene_ensembl",
+    file_name = "THP1_L5_1v3",
+    csv_title = "THP1_L5_1v3_html",
+    excel_title = "THP1_L5_1v3_html"
+)
+
+resultados_THP1_A4_1v3 <- analyze_filter_export_and_save_table(
+    dds = dds_thp1,
+    groups = c("INFECTION", "A4_1", "A4_3"),
+    gene_id = "hsapiens_gene_ensembl",
+    file_name = "THP1_A4_1v3",
+    csv_title = "THP1_A4_1v3_html",
+    excel_title = "THP1_A4_1v3_html"
+)
+
+bresultados_bomac_L5_1v3 <- analyze_filter_export_and_save_table(
+    dds = dds_bomac,
+    groups = c("INFECTION", "L5_1", "L5_3"),
+    gene_id = "btaurus_gene_ensembl",
+    file_name = "BoMac_L5_1v3",
+    csv_title = "BoMac_L5_1v3_html",
+    excel_title = "BoMacL5_1v3_html"
+)
+
+bresultados_bomac_A4_1v3 <- analyze_filter_export_and_save_table(
+    dds = dds_bomac,
+    groups = c("INFECTION", "A4_1", "A4_3"),
+    gene_id = "btaurus_gene_ensembl",
+    file_name = "BoMac_A4_1v3",
+    csv_title = "BoMac_A4_1v3_html",
+    excel_title = "BoMacA4_1v3_html"
+)
+```
+
+```{r}
+obtener_ortologos_y_cruzar <- function(genes, dataframe) {
+    # Configurar el objeto ensembl para Homo sapiens
+    ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+    # Atributos para obtener los ortologos de Bos taurus
+    attributes <- c('ensembl_gene_id', 'btaurus_homolog_ensembl_gene',
+                    'btaurus_homolog_orthology_type')
+
+    # Obtener ortÃ³logos de Bos taurus
+    orthologs <- getBM(attributes = attributes, 
+                       filters = 'ensembl_gene_id',
+                       values = genes,
+                       mart = ensembl)
+
+    # Filtrar por ortologos one-to-one
+    orthologs_one_to_one <- orthologs[orthologs$btaurus_homolog_orthology_type == 'ortholog_one2one', ]
+
+    # Cruzar los dataframes
+    resultado <- merge(dataframe, orthologs_one_to_one, by.x = "Row.names", by.y = "ensembl_gene_id", all = FALSE)
+
+    # Devolver el resultado
+    return(resultado)
+}
+asignar_colores <- function(dataframe) {
+    dataframe$color2 <- ifelse(dataframe$log2FoldChange > 0 & -log10(dataframe$padj) > 1.3, "red",
+                              ifelse(dataframe$log2FoldChange < 0 & -log10(dataframe$padj) > 1.3, "blue", "grey"))
+    return(dataframe)
+}
+cruzado_THP1_L5_1v3 <- obtener_ortologos_y_cruzar(resultados_THP1_L5_1v3$all_data$Row.names, resultados_THP1_L5_1v3$all_data)
+cruzado_THP1_A4_1v3 <- obtener_ortologos_y_cruzar(resultados_THP1_A4_1v3$all_data$Row.names, resultados_THP1_A4_1v3$all_data)
+
+
+cruzado_THP1_L5_1v3<-asignar_colores(cruzado_THP1_L5_1v3)
+cruzado_THP1_A4_1v3<-asignar_colores(cruzado_THP1_A4_1v3)
+
+bresultados_bomac_L5_1v3<-asignar_colores(bresultados_bomac_L5_1v3$all_data)
+bresultados_bomac_A4_1v3<-asignar_colores(bresultados_bomac_A4_1v3$all_data)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+#NO FOLD THRESHOLD >0, <0
+up_THP1_L5_1v3<- filter(cruzado_THP1_L5_1v3, color2 == 'red')$btaurus_homolog_ensembl_gene
+down_THP1_L5_1v3<- filter(cruzado_THP1_L5_1v3, color2 == 'blue')$btaurus_homolog_ensembl_gene
+
+up_bomac_L5_1v3<- filter(bresultados_bomac_L5_1v3, color2 == 'red')$Row.names
+down_bomac_L5_1v3<- filter(bresultados_bomac_L5_1v3, color2 == 'blue')$Row.names
+
+up_THP1_A4_1v3<- filter(cruzado_THP1_A4_1v3, color2 == 'red')$btaurus_homolog_ensembl_gene
+down_THP1_A4_1v3<- filter(cruzado_THP1_A4_1v3, color2 == 'blue')$btaurus_homolog_ensembl_gene
+
+up_bomac_A4_1v3<- filter(bresultados_bomac_A4_1v3, color2 == 'red')$Row.names
+down_bomac_A4_1v3<- filter(bresultados_bomac_A4_1v3, color2 == 'blue')$Row.names
+```
+
+
+```{r}
+generar_venn_y_extraer_intersecciones <- function(up_THP1_MvL, down_THP1_MvL, up_bomac_MvL, down_bomac_MvL) {
+    # Crear el diagrama de Venn
+    venn_diagram <- venn.diagram(
+        x = list(up_THP1_MvL, down_THP1_MvL, up_bomac_MvL, down_bomac_MvL),
+        category.names = c("up_THP-1", "down_THP-1", "up_BoMac", "down_BoMac"),
+        filename = NULL,
+        fill = c("red", "blue", "#ffa8a8", "#a8abff"),
+        alpha = 0.5,
+        cex = 2,
+        lty = 'blank',
+        cat.cex = 1,
+        cat.fontface = "bold",
+        cat.default.pos = "outer",
+        scaled = TRUE
+    )
+    grid.draw(venn_diagram)
+
+    # Generar tabla de intersecciones
+    table <- gplots::venn(list(
+        `up_THP-1`= up_THP1_MvL,
+        `down_THP-1`= down_THP1_MvL,
+        `up_BoMac`= up_bomac_MvL,
+        `down_BoMac`= down_bomac_MvL
+    ), show.plot=FALSE)
+
+    # Extraer intersecciones especÃ­ficas
+    down_interseccion <- attr(table, "intersections")$`down_THP-1:down_BoMac`
+    up_interseccion <- attr(table, "intersections")$`up_THP-1:up_BoMac`
+
+    # Devolver las intersecciones
+    return(list(down = down_interseccion, up = up_interseccion))
+}
+
+res_high1v3<- generar_venn_y_extraer_intersecciones(up_THP1_L5_1v3,down_THP1_L5_1v3,up_bomac_A4_1v3,down_bomac_A4_1v3)
+
+res_low1v3<- generar_venn_y_extraer_intersecciones(up_THP1_A4_1v3,down_THP1_A4_1v3,up_bomac_L5_1v3,down_bomac_L5_1v3)
+```
+
+
+```{r}
+enrich_kegg <- function(all_up_thp1, org_db, organism_code) {
+  # Convertir ENSEMBL IDs a Entrez IDs
+  entrez_genes <- AnnotationDbi::mapIds(org_db, 
+                                        keys = all_up_thp1, 
+                                        column = "ENTREZID", 
+                                        keytype = "ENSEMBL", 
+                                        multiVals = "first")
+  entrez_genes <- entrez_genes[!is.na(entrez_genes)]
+
+  # Enriquecimiento KEGG
+  kegg_result <- clusterProfiler::enrichKEGG(
+    gene         = entrez_genes,
+    organism     = organism_code,
+    keyType      = "kegg",
+    pvalueCutoff = 0.05,
+    qvalueCutoff = 0.2
+  )
+
+  # Obtener todos los identificadores Entrez y convertirlos a nombres de genes
+  all_entrez_ids <- unique(unlist(strsplit(as.character(kegg_result@result$geneID), "/")))
+  entrez2name <- AnnotationDbi::select(org_db, 
+                                       keys = all_entrez_ids, 
+                                       columns = c("ENTREZID", "SYMBOL"), 
+                                       keytype = "ENTREZID")
+  entrez2name <- entrez2name[!duplicated(entrez2name$ENTREZID), ]
+
+  # FunciÃ³n para convertir Entrez IDs a nombres de genes
+  convert_entrez_to_name <- function(entrez_ids_str) {
+    entrez_ids <- strsplit(entrez_ids_str, "/")[[1]]
+    gene_names <- entrez2name$SYMBOL[match(entrez_ids, entrez2name$ENTREZID)]
+    return(paste(gene_names, collapse = "/"))
+  }
+
+  # Aplicar la conversiÃ³n a los resultados de KEGG
+  kegg_result@result$geneID <- sapply(as.character(kegg_result@result$geneID), convert_entrez_to_name)
+
+  # Devolver el resultado
+  return(kegg_result)
+}
+enrich_GO_and_convert <- function(id_genes, org_db, ontology) {
+    # Convertir ENSEMBL IDs a Entrez IDs
+  entrez_genes <- AnnotationDbi::mapIds(org_db, 
+                                        keys = id_genes, 
+                                        column = "ENTREZID", 
+                                        keytype = "ENSEMBL", 
+                                        multiVals = "first")
+  entrez_genes <- entrez_genes[!is.na(entrez_genes)]
+  
+  # Enriquecimiento GO
+  ego_GO <- enrichGO(
+    gene          = entrez_genes,
+    OrgDb         = org_db,
+    keyType       = "ENTREZID",
+    ont           = ontology,  # BP, CC o MF
+    pAdjustMethod = "BH",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.2    
+  )
+
+  # Obtiene los identificadores Entrez Ãºnicos de los resultados
+  all_entrez_ids <- unique(unlist(strsplit(as.character(ego_GO@result$geneID), "/")))
+
+  # Mapea los identificadores Entrez a los nombres de los genes
+  entrez2name <- AnnotationDbi::select(org_db, 
+                                       keys = all_entrez_ids, 
+                                       columns = c("ENTREZID", "SYMBOL"), 
+                                       keytype = "ENTREZID")
+
+  # Elimina duplicados
+  entrez2name <- entrez2name[!duplicated(entrez2name$ENTREZID), ]
+
+  # FunciÃ³n para convertir identificadores Entrez en nombres de genes
+  convert_entrez_to_name <- function(entrez_ids_str) {
+    entrez_ids <- strsplit(entrez_ids_str, "/")[[1]]
+    gene_names <- entrez2name$SYMBOL[match(entrez_ids, entrez2name$ENTREZID)]
+    return(paste(gene_names, collapse = "/"))
+  }
+
+  # Reemplaza los valores en la columna geneID con los nombres de los genes
+  ego_GO@result$geneID <- sapply(as.character(ego_GO@result$geneID), convert_entrez_to_name)
+
+  return(ego_GO)
+}
+perform_analysis <- function(enrichment_results, orgdb, ont) {
+  # Filtrar resultados por valor p ajustado
+  filter_thp1bpdwn <- enrichment_results %>%
+    filter(p.adjust < 0.05)
+  
+  # Calcular la matriz de similitud
+  simMatrix <- calculateSimMatrix(filter_thp1bpdwn$ID,
+                                  orgdb = orgdb,
+                                  ont = ont,
+                                  method = "Rel")
+  
+  # Convertir q-values a scores
+  scores <- setNames(-log10(filter_thp1bpdwn$qvalue), filter_thp1bpdwn$ID)
+  
+  # Reducir la matriz de similitud
+  reducedTerms <- reduceSimMatrix(simMatrix,
+                                  scores,
+                                  threshold = 0.7,
+                                  orgdb = orgdb)
+  
+  # Devolver una lista con los resultados
+  return(list(simMatrix = simMatrix, scores = scores, reducedTerms = reducedTerms))
+}
+```
+
+# res_high1v3
+## UP
+### KEGG
+```{r}
+get_one_to_one_orthologs <- function(gene_list) {
+  # Usar la base de datos biomart de Ensembl para Bos taurus
+  ensembl <- useMart("ensembl", dataset = "btaurus_gene_ensembl")
+
+  # Atributos para recuperar ortÃ³logos humanos de genes de Bos taurus
+  attributes <- c('ensembl_gene_id', 'hsapiens_homolog_ensembl_gene', 'hsapiens_homolog_orthology_type', 'hsapiens_homolog_associated_gene_name')
+
+  # Recuperar ortÃ³logos para la lista proporcionada de genes de Bos taurus
+  orthologs <- getBM(attributes = attributes,
+                     filters = 'ensembl_gene_id',
+                     values = gene_list,
+                     mart = ensembl)
+
+  # Filtrar por ortÃ³logos uno-a-uno
+  orthologs_one_to_one <- orthologs[orthologs$hsapiens_homolog_orthology_type == 'ortholog_one2one', ]
+
+  # Devolver el marco de datos filtrado
+  return(orthologs_one_to_one)
+}
+up_res_HvL<-get_one_to_one_orthologs(res_high1v3$up)
+kegg_up_res_HvL<-enrich_kegg(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, 'hsa')
+dotplot(kegg_up_res_HvL)
+```
+### BP
+```{r}
+bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "BP")
+rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "BP")
+wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+### MF
+```{r}
+bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "MF")
+rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "MF")
+wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+### CC
+```{r}
+bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "CC")
+rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "CC")
+wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+## DOWN
+### KEGG
+```{r}
+up_res_HvL<-get_one_to_one_orthologs(res_high1v3$down)
+kegg_up_res_HvL<-enrich_kegg(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, 'hsa')
+dotplot(kegg_up_res_HvL)
+```
+### BP
+```{r}
+bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "BP")
+rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "BP")
+wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+### MF
+```{r}
+#bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "MF")
+#rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "MF")
+#wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+#scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+### CC
+```{r}
+bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "CC")
+rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "CC")
+wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+
+
+
+# res_low1v3
+## UP
+### KEGG
+```{r}
+get_one_to_one_orthologs <- function(gene_list) {
+  # Usar la base de datos biomart de Ensembl para Bos taurus
+  ensembl <- useMart("ensembl", dataset = "btaurus_gene_ensembl")
+
+  # Atributos para recuperar ortÃ³logos humanos de genes de Bos taurus
+  attributes <- c('ensembl_gene_id', 'hsapiens_homolog_ensembl_gene', 'hsapiens_homolog_orthology_type', 'hsapiens_homolog_associated_gene_name')
+
+  # Recuperar ortÃ³logos para la lista proporcionada de genes de Bos taurus
+  orthologs <- getBM(attributes = attributes,
+                     filters = 'ensembl_gene_id',
+                     values = gene_list,
+                     mart = ensembl)
+
+  # Filtrar por ortÃ³logos uno-a-uno
+  orthologs_one_to_one <- orthologs[orthologs$hsapiens_homolog_orthology_type == 'ortholog_one2one', ]
+
+  # Devolver el marco de datos filtrado
+  return(orthologs_one_to_one)
+}
+up_res_HvL<-get_one_to_one_orthologs(res_low1v3$up)
+kegg_up_res_HvL<-enrich_kegg(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, 'hsa')
+dotplot(kegg_up_res_HvL)
+```
+### BP
+```{r}
+bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "BP")
+rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "BP")
+wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+### MF
+```{r}
+bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "MF")
+rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "MF")
+wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+### CC
+```{r}
+bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "CC")
+rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "CC")
+wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+## DOWN
+### KEGG
+```{r}
+up_res_HvL<-get_one_to_one_orthologs(res_low1v3$down)
+#kegg_up_res_HvL<-enrich_kegg(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, 'hsa')
+#dotplot(kegg_up_res_HvL)
+```
+### BP
+```{r}
+#bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "BP")
+#rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "BP")
+#wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+#scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+### MF
+```{r}
+bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "MF")
+rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "MF")
+wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+#scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
+### CC
+```{r}
+#bp_upthp1HvL<-enrich_GO_and_convert(up_res_HvL$hsapiens_homolog_ensembl_gene, org.Hs.eg.db, "CC")
+#rrBo_up_BP_thp1_HvL<-perform_analysis(bp_upthp1HvL@result, "org.Hs.eg.db", "CC")
+#wordcloudPlot(rrBo_up_BP_thp1_HvL$reducedTerms,scale=c(3,.4), min.freq=1,use.r.layout=T)
+
+#scatterPlot(rrBo_up_BP_thp1_HvL$simMatrix, rrBo_up_BP_thp1_HvL$reducedTerms)
+```
